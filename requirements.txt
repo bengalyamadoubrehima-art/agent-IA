@@ -3,3 +3,5 @@ python-dotenv
 sounddevice
 soundfile
 numpy
+PySide6
+websockets

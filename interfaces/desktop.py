@@ -1,6 +1,7 @@
 import sys
+import threading
 
-from PySide6.QtCore import Qt, Signal, QThread, QTimer
+from PySide6.QtCore import QObject, Qt, Signal, QThread, QTimer
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
@@ -8,11 +9,68 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
+    QMessageBox,
     QPushButton,
     QScrollArea,
     QVBoxLayout,
     QWidget,
 )
+
+from tools.pc import PCAgent
+
+
+class ConfirmationDialog(QObject):
+    """
+    Affiche les demandes de confirmation dans une boîte
+    de dialogue, même quand elles viennent du thread IA.
+    """
+
+    requested = Signal(str, object)
+
+    def __init__(self, parent=None):
+        super().__init__()
+        self.parent = parent
+        self.result = False
+
+        self.requested.connect(
+            self._ask,
+            Qt.BlockingQueuedConnection
+        )
+
+    def _ask(self, tool_name, arguments):
+        details = "\n".join(
+            f"{key} : {value}"
+            for key, value in (arguments or {}).items()
+        )
+
+        answer = QMessageBox.question(
+            self.parent,
+            "JARVIS — Confirmation",
+            f"Autoriser l'action « {tool_name} » ?\n\n{details}",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+
+        self.result = answer == QMessageBox.Yes
+
+    def ask(self, tool_name, arguments):
+        if threading.current_thread() is threading.main_thread():
+            self._ask(tool_name, arguments)
+        else:
+            self.requested.emit(tool_name, arguments)
+
+        return self.result
+
+
+class PhoneStatusWorker(QThread):
+    checked = Signal(bool)
+
+    def __init__(self, phone):
+        super().__init__()
+        self.phone = phone
+
+    def run(self):
+        self.checked.emit(self.phone.est_connecte())
 
 
 class AIWorker(QThread):
@@ -34,11 +92,13 @@ class AIWorker(QThread):
 
 class JarvisWindow(QMainWindow):
 
-    def __init__(self, orchestrator, voice=None):
+    def __init__(self, orchestrator, voice=None, phone=None):
         super().__init__()
 
         self.orchestrator = orchestrator
         self.voice = voice
+        self.phone = phone
+        self.phone_worker = None
         self.worker = None
         self.pulse_state = False
 
@@ -49,6 +109,7 @@ class JarvisWindow(QMainWindow):
         self.build_ui()
         self.apply_style()
         self.start_effects()
+        self.start_phone_status()
 
     # =========================================================
     # INTERFACE
@@ -350,6 +411,8 @@ class JarvisWindow(QMainWindow):
             "coreStatus"
         )
 
+        self.core_icon = core_icon
+
         core_layout.addWidget(
             core_icon,
             alignment=Qt.AlignCenter
@@ -611,7 +674,7 @@ class JarvisWindow(QMainWindow):
             "Connecté"
         )
 
-        self.add_connection(
+        self.phone_status = self.add_connection(
             layout,
             "▯",
             "Téléphone",
@@ -670,6 +733,40 @@ class JarvisWindow(QMainWindow):
 
         layout.addSpacing(8)
 
+        return status_label
+
+    def start_phone_status(self):
+
+        if self.phone is None:
+            return
+
+        self.phone_timer = QTimer(self)
+        self.phone_timer.timeout.connect(
+            self.check_phone
+        )
+        self.phone_timer.start(30000)
+
+        self.check_phone()
+
+    def check_phone(self):
+
+        if self.phone_worker is not None and self.phone_worker.isRunning():
+            return
+
+        self.phone_worker = PhoneStatusWorker(
+            self.phone
+        )
+        self.phone_worker.checked.connect(
+            self.on_phone_status
+        )
+        self.phone_worker.start()
+
+    def on_phone_status(self, connected):
+
+        self.phone_status.setText(
+            "● Connecté" if connected else "● Déconnecté"
+        )
+
     # =========================================================
     # TOOLS PANEL
     # =========================================================
@@ -719,6 +816,11 @@ class JarvisWindow(QMainWindow):
 
             button.setCursor(
                 Qt.PointingHandCursor
+            )
+
+            button.clicked.connect(
+                lambda _=False, app=name:
+                    PCAgent.ouvrir_application(app)
             )
 
             layout.addWidget(
@@ -1455,7 +1557,9 @@ class JarvisWindow(QMainWindow):
 
 def run_desktop(
     orchestrator,
-    voice=None
+    voice=None,
+    confirmation=None,
+    phone=None
 ):
 
     app = QApplication.instance()
@@ -1467,8 +1571,14 @@ def run_desktop(
 
     window = JarvisWindow(
         orchestrator=orchestrator,
-        voice=voice
+        voice=voice,
+        phone=phone
     )
+
+    if confirmation is not None:
+        dialog = ConfirmationDialog(window)
+        confirmation.set_handler(dialog.ask)
+        window.confirmation_dialog = dialog
 
     window.show()
 

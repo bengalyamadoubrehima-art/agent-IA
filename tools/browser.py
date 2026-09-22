@@ -1,3 +1,4 @@
+import urllib.parse
 import webbrowser
 
 
@@ -23,3 +24,23 @@ class BrowserTools:
             return f"Impossible d'ouvrir le site : {url}"
 
         return f"Site ouvert : {url}"
+
+    @staticmethod
+    def rechercher_youtube(recherche):
+
+        url = (
+            "https://www.youtube.com/results?search_query="
+            + urllib.parse.quote_plus(recherche)
+        )
+
+        return BrowserTools.ouvrir_site(url)
+
+    @staticmethod
+    def recherche_web(recherche):
+
+        url = (
+            "https://www.google.com/search?q="
+            + urllib.parse.quote_plus(recherche)
+        )
+
+        return BrowserTools.ouvrir_site(url)

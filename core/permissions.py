@@ -1,4 +1,4 @@
-﻿class PermissionManager:
+class PermissionManager:
     """
     Gestion centrale des permissions de JARVIS.
 
@@ -46,6 +46,28 @@
             # -----------------------------
 
             "ouvrir_application": self.ALLOWED,
+            "lister_applications": self.ALLOWED,
+            "rechercher_youtube": self.ALLOWED,
+            "recherche_web": self.ALLOWED,
+
+            # -----------------------------
+            # Téléphone
+            # -----------------------------
+
+            "ouvrir_application_telephone": self.ALLOWED,
+            "ouvrir_lien_telephone": self.ALLOWED,
+            "rechercher_youtube_telephone": self.ALLOWED,
+            "rechercher_contact": self.ALLOWED,
+            "raccrocher": self.ALLOWED,
+            "statut_telephone": self.ALLOWED,
+
+            # -----------------------------
+            # Gmail (lecture)
+            # -----------------------------
+
+            "lire_emails": self.ALLOWED,
+            "rechercher_emails": self.ALLOWED,
+            "lire_email": self.ALLOWED,
 
             # -----------------------------
             # Mémoire
