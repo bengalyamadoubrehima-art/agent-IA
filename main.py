@@ -184,12 +184,20 @@ def create_jarvis():
 
     mobile.start()
 
-    return orchestrator, voice, confirmation, phone
+    return {
+        "orchestrator": orchestrator,
+        "voice": voice,
+        "confirmation": confirmation,
+        "phone": phone,
+        "email": email,
+        "event_bus": event_bus,
+        "state_manager": state_manager,
+    }
 
 
 def main():
 
-    orchestrator, voice, confirmation, phone = create_jarvis()
+    jarvis = create_jarvis()
 
     print()
     print("╔══════════════════════════════════════╗")
@@ -209,12 +217,7 @@ def main():
 
     print("🚀 Lancement de JARVIS...")
 
-    return run_desktop(
-        orchestrator=orchestrator,
-        voice=voice,
-        confirmation=confirmation,
-        phone=phone,
-    )
+    return run_desktop(**jarvis)
 
 
 if __name__ == "__main__":

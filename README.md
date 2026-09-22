@@ -18,6 +18,21 @@ boîte **Gmail**, à la voix ou au clavier.
 Les actions sensibles (messages, appels, envoi d'e-mails) demandent toujours
 une confirmation (boîte de dialogue dans la fenêtre JARVIS).
 
+## L'interface
+
+Interface HUD sombre inspirée de la maquette « Jarvis UI » :
+
+- **Barre du haut** : état de JARVIS, date et heure.
+- **Diagnostics système** : processeur, mémoire, débit réseau et stockage, en temps réel.
+- **Journal d'activité** : chaque action réellement exécutée par JARVIS.
+- **Noyau central** : ses anneaux accélèrent quand JARVIS réfléchit ou agit, et
+  virent au rouge en cas d'erreur.
+- **Conversation** et **barre de commande** : tape ta demande puis Entrée, ou
+  clique sur le micro (raccourci **Ctrl+Espace**) pour parler.
+- **Modules actifs** : Ordinateur, Téléphone, Gmail et Voix s'allument quand ils
+  sont prêts. Clique sur un module pour revérifier les connexions.
+- **Signal audio** : s'anime pendant l'écoute et pendant que JARVIS parle.
+
 ---
 
 ## 1. Installation sur le PC
@@ -105,7 +120,8 @@ La lecture n'altère rien : les e-mails lus par JARVIS restent « non lus ».
 ```
 main.py                   assemble tous les modules et lance l'interface
 core/                     IA (outils OpenAI), planificateur, mémoire, permissions, confirmation
-interfaces/desktop.py     fenêtre PySide6 (chat, voix, confirmations, état du téléphone)
+interfaces/desktop.py     interface HUD PySide6 (conversation, voix, confirmations, diagnostics)
+interfaces/assets/fonts/  polices Orbitron et Space Mono (licence SIL OFL)
 interfaces/voice.py       enregistrement, transcription et synthèse vocale
 tools/pc.py               fichiers, dossiers et applications du PC
 tools/browser.py          sites, recherches Google / YouTube
