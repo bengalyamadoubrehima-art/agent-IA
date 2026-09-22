@@ -86,7 +86,7 @@ PC. Il n'y a aucune application à installer sur le téléphone.
 5. Mets l'indicatif de ton pays dans `PHONE_COUNTRY_CODE` (ex. `33` France,
    `223` Mali). WhatsApp en a besoin pour les numéros enregistrés sans `+`.
 
-Le voyant « Téléphone » de la fenêtre JARVIS passe à **Connecté**.
+Le module **TÉLÉPHONE** s'allume dans la fenêtre JARVIS.
 
 > **Bon à savoir**
 > - Pour WhatsApp et les SMS, JARVIS ouvre la conversation puis appuie sur
