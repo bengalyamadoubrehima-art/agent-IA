@@ -31,32 +31,23 @@ def recognize(model, grammar):
 
 
 def main():
-    SetLogLevel(-1)
+    SetLogLevel(0)
     models = {"fr": Model(sys.argv[1]), "en": Model(sys.argv[2])}
 
-    grammars = {
-        "fr": [
-            None,
-            '["jarvis", "[unk]"]',
-            '["jarre vis", "[unk]"]',
-            '["jarvis", "jarre vis", "jar vis", "jarre visse", "[unk]"]',
-        ],
-        "en": [None, '["jarvis", "[unk]"]'],
-    }
+    grammar = '["jarvis", "[unk]"]'
 
     phrases = [
         ("Jarvis", "fr"), ("Jarvis", "fr+m3"), ("Jarvis", "fr+f2"), ("Jarvis", "en-us"),
         ("Jarvis, ouvre YouTube", "fr"),
         ("Ouvre YouTube", "fr"), ("J'arrive dans cinq minutes", "fr"),
-        ("Le service est fini", "fr"), ("Gervais", "fr"), ("Bonjour, comment ça va", "fr"),
+        ("Le service est fini", "fr"), ("Gervais arrive", "fr"), ("Bonjour, comment ça va", "fr"),
     ]
 
     for text, voice in phrases:
         synthesize(text, voice)
-        for lang, model in models.items():
-            for grammar in grammars[lang]:
-                result = recognize(model, grammar)
-                print(f"::notice::[{lang}] {voice} « {text} » | grammaire={grammar or 'libre'} -> « {result} »")
+        fr = recognize(models["fr"], grammar)
+        en = recognize(models["en"], grammar)
+        print(f"::notice::{voice} « {text} » -> FR « {fr} » | EN « {en} »")
 
 
 if __name__ == "__main__":
