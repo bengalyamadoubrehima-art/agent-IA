@@ -44,7 +44,7 @@ pip install -r requirements.txt
 copy .env.example .env            # Linux/macOS : cp .env.example .env
 ```
 
-Renseigne au minimum `OPENAI_API_KEY` dans `.env`, puis :
+Renseigne au minimum la clé du « cerveau » dans `.env` (voir ci-dessous), puis :
 
 ```bash
 python main.py
@@ -54,6 +54,27 @@ Sur le PC, l'ouverture d'applications fonctionne immédiatement : JARVIS
 cherche dans le menu Démarrer (y compris les applications du Microsoft Store)
 sous Windows, dans les fichiers `.desktop` sous Linux, et dans `/Applications`
 sous macOS.
+
+### Le cerveau : Gemini (gratuit) ou OpenAI
+
+JARVIS a besoin d'une IA pour comprendre tes phrases. Par défaut, il utilise
+**Google Gemini**, gratuit et **sans carte bancaire** :
+
+1. Va sur **aistudio.google.com** avec un compte Google et clique sur
+   **Get API key** pour créer une clé. Google demande d'avoir 18 ans : sinon,
+   un parent peut créer la clé avec son compte.
+2. Mets-la dans `.env` : `GEMINI_API_KEY=ta_clé`.
+
+Le modèle Gemini est choisi automatiquement (le « Flash » le plus récent).
+L'offre gratuite a une limite de demandes par jour, largement suffisante pour
+un usage perso. Sur l'offre gratuite, Google peut utiliser les échanges pour
+améliorer ses modèles.
+
+Avec Gemini, la voix du PC est gratuite aussi : reconnaissance vocale de Google
+et voix naturelle de Microsoft Edge (`JARVIS_VOICE`).
+
+Pour utiliser OpenAI (payant) à la place : `AI_PROVIDER=openai` et
+`OPENAI_API_KEY=…`.
 
 ## 2. Connecter le téléphone Android
 
@@ -127,7 +148,7 @@ messages WhatsApp, lire, rechercher et envoyer des e-mails Gmail. Elle peut auss
 transmettre des ordres au PC quand il est allumé (« ouvre VS Code sur le PC »).
 
 La reconnaissance et la synthèse vocales sont celles d'Android : elles sont
-**gratuites**. Seul le « cerveau » utilise tes crédits OpenAI.
+**gratuites**. Le « cerveau » est Gemini (gratuit) par défaut, ou OpenAI.
 
 ### Installer l'application
 
@@ -148,7 +169,8 @@ conservés.
 
 Touche l'icône ⚙ en haut à droite :
 
-- **Clé API OpenAI** et **Modèle** : la même clé que sur le PC.
+- **Cerveau** : **Gemini (gratuit)** et ta **clé API Gemini** (la même que sur
+  le PC). Laisse **Modèle** vide : il est choisi automatiquement.
 - **Gmail** : ton adresse et ton mot de passe d'application.
 - **Indicatif pays** : `223` pour le Mali.
 - **Lien avec le PC** (facultatif) : l'adresse IP du PC et le jeton
@@ -224,7 +246,7 @@ directement le micro. Tu peux aussi le glisser sur ton écran d'accueil.
 
 ```
 main.py                   assemble tous les modules et lance l'interface
-core/                     IA (outils OpenAI), planificateur, mémoire, permissions, confirmation
+core/                     cerveau IA (Gemini ou OpenAI, avec outils), mémoire, permissions, confirmation
 interfaces/desktop.py     interface HUD PySide6 (conversation, voix, confirmations, diagnostics)
 interfaces/assets/fonts/  polices Orbitron et Space Mono (licence SIL OFL)
 interfaces/voice.py       enregistrement, transcription et synthèse vocale

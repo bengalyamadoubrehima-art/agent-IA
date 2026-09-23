@@ -9,13 +9,27 @@ class JarvisSettings(context: Context) {
 
     private val prefs = context.getSharedPreferences("jarvis", Context.MODE_PRIVATE)
 
+    /** Cerveau utilisé : [PROVIDER_GEMINI] (gratuit, par défaut) ou [PROVIDER_OPENAI]. */
+    var provider: String
+        get() = text("provider", PROVIDER_GEMINI)
+        set(value) = save("provider", value)
+
+    var geminiKey: String
+        get() = text("gemini_key")
+        set(value) = save("gemini_key", value)
+
     var openAiKey: String
         get() = text("openai_key")
         set(value) = save("openai_key", value)
 
+    /** Clé du cerveau choisi. */
+    val apiKey: String
+        get() = if (provider == PROVIDER_OPENAI) openAiKey else geminiKey
+
+    /** Modèle imposé ; vide = choisi automatiquement. */
     var model: String
-        get() = text("model", DEFAULT_MODEL)
-        set(value) = save("model", value.ifBlank { DEFAULT_MODEL })
+        get() = text("brain_model")
+        set(value) = save("brain_model", value)
 
     var gmailAddress: String
         get() = text("gmail_address")
@@ -58,7 +72,10 @@ class JarvisSettings(context: Context) {
     }
 
     companion object {
-        // Même modèle que sur le PC (main.py) ; modifiable dans les réglages.
-        const val DEFAULT_MODEL = "gpt-5.6-luna"
+        const val PROVIDER_GEMINI = "gemini"
+        const val PROVIDER_OPENAI = "openai"
+
+        // Modèle OpenAI par défaut (le même que sur le PC).
+        const val DEFAULT_OPENAI_MODEL = "gpt-5.6-luna"
     }
 }

@@ -264,7 +264,7 @@ class StatusWorker(QThread):
             "pc": True,
             "phone": bool(self.phone and self.phone.est_connecte()),
             "gmail": bool(self.email and self.email.is_configured()),
-            "voice": bool(self.voice and self.voice.client),
+            "voice": bool(self.voice and self.voice.available),
         })
 
 
@@ -1041,7 +1041,7 @@ class JarvisWindow(QMainWindow):
             "pc": ("Contrôle du PC actif", ""),
             "phone": ("Téléphone Android connecté via ADB", "Téléphone non connecté (voir README)"),
             "gmail": ("Compte Gmail configuré", "Gmail non configuré (.env)"),
-            "voice": ("Voix disponible", "Voix indisponible (clé OpenAI absente)"),
+            "voice": ("Voix disponible", "Voix indisponible"),
         }
 
         for key, module in self.modules.items():

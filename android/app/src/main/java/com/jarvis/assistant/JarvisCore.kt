@@ -259,7 +259,7 @@ class JarvisCore private constructor(private val context: Context) {
             val pcReachable = withContext(Dispatchers.IO) { pc.reachable() }
 
             modules = Modules(
-                brain = settings.openAiKey.isNotBlank(),
+                brain = settings.apiKey.isNotBlank(),
                 whatsapp = WhatsAppService.isEnabled(context),
                 gmail = gmail.isConfigured(),
                 pc = pcReachable,

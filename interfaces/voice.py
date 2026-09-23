@@ -1,11 +1,10 @@
+import asyncio
 import os
 import tempfile
 from pathlib import Path
 
 import sounddevice as sd
 import soundfile as sf
-from dotenv import load_dotenv
-from openai import OpenAI
 
 from core.state import JarvisState
 
@@ -13,6 +12,10 @@ from core.state import JarvisState
 class VoiceInterface:
     """
     Interface vocale de JARVIS.
+
+    Avec OpenAI : transcription et voix d'OpenAI (payantes).
+    Avec Gemini : voix gratuites, reconnaissance vocale de Google et
+    voix naturelle de Microsoft Edge (edge-tts).
 
     Flux :
 
@@ -33,6 +36,7 @@ class VoiceInterface:
         self,
         orchestrator,
         base_dir,
+        brain=None,
         state_manager=None,
         event_bus=None,
         sample_rate=16000,
@@ -55,17 +59,11 @@ class VoiceInterface:
             recording_seconds
         )
 
-        load_dotenv(
-            self.base_dir / ".env"
-        )
-
-        api_key = os.getenv(
-            "OPENAI_API_KEY"
-        )
-
+        # Voix OpenAI seulement si le cerveau est OpenAI ;
+        # sinon voix gratuites.
         self.client = (
-            OpenAI(api_key=api_key)
-            if api_key
+            brain.client
+            if brain is not None and brain.provider == "openai"
             else None
         )
 
@@ -78,6 +76,16 @@ class VoiceInterface:
         )
 
         self.tts_voice = "coral"
+
+        # Voix gratuite (edge-tts) : voix française naturelle.
+        self.edge_voice = os.getenv(
+            "JARVIS_VOICE",
+            "fr-FR-HenriNeural"
+        )
+
+    @property
+    def available(self):
+        return True
 
     # =========================================================
     # ÉVÉNEMENTS
@@ -105,19 +113,6 @@ class VoiceInterface:
 
             self.state.set_state(
                 state
-            )
-
-    # =========================================================
-    # CLIENT OPENAI
-    # =========================================================
-
-    def _check_client(self):
-
-        if self.client is None:
-
-            raise RuntimeError(
-                "La clé API OpenAI est absente "
-                "du fichier .env."
             )
 
     # =========================================================
@@ -195,28 +190,34 @@ class VoiceInterface:
         audio_path
     ):
 
-        self._check_client()
-
         print(
             "🧠 Transcription..."
         )
 
-        with open(
-            audio_path,
-            "rb"
-        ) as audio_file:
+        if self.client is not None:
 
-            result = (
-                self.client
-                .audio
-                .transcriptions
-                .create(
-                    model=self.transcription_model,
-                    file=audio_file,
+            with open(
+                audio_path,
+                "rb"
+            ) as audio_file:
+
+                result = (
+                    self.client
+                    .audio
+                    .transcriptions
+                    .create(
+                        model=self.transcription_model,
+                        file=audio_file,
+                    )
                 )
-            )
 
-        text = result.text.strip()
+            text = result.text.strip()
+
+        else:
+
+            text = self._transcribe_free(
+                audio_path
+            )
 
         print(
             f"🗣️ Tu as dit : {text}"
@@ -240,8 +241,6 @@ class VoiceInterface:
         text
     ):
 
-        self._check_client()
-
         if not text:
             return
 
@@ -260,32 +259,41 @@ class VoiceInterface:
             "🔊 JARVIS parle..."
         )
 
-        output_path = (
-            self.base_dir
-            / "audio"
-            / "jarvis_response.wav"
-        )
+        audio_dir = self.base_dir / "audio"
 
-        output_path.parent.mkdir(
+        audio_dir.mkdir(
             parents=True,
             exist_ok=True,
         )
 
-        with (
-            self.client
-            .audio
-            .speech
-            .with_streaming_response
-            .create(
-                model=self.tts_model,
-                voice=self.tts_voice,
-                input=text,
-                response_format="wav",
-            )
-            as response
-        ):
+        if self.client is not None:
 
-            response.stream_to_file(
+            output_path = audio_dir / "jarvis_response.wav"
+
+            with (
+                self.client
+                .audio
+                .speech
+                .with_streaming_response
+                .create(
+                    model=self.tts_model,
+                    voice=self.tts_voice,
+                    input=text,
+                    response_format="wav",
+                )
+                as response
+            ):
+
+                response.stream_to_file(
+                    output_path
+                )
+
+        else:
+
+            output_path = audio_dir / "jarvis_response.mp3"
+
+            self._synthesize_free(
+                text,
                 output_path
             )
 
@@ -298,6 +306,47 @@ class VoiceInterface:
             {
                 "text": text
             }
+        )
+
+    # =========================================================
+    # VOIX GRATUITES
+    # =========================================================
+
+    @staticmethod
+    def _transcribe_free(audio_path):
+        """Reconnaissance vocale gratuite de Google (français)."""
+
+        import speech_recognition as sr
+
+        recognizer = sr.Recognizer()
+
+        with sr.AudioFile(str(audio_path)) as source:
+            audio = recognizer.record(source)
+
+        try:
+            return recognizer.recognize_google(
+                audio,
+                language="fr-FR"
+            ).strip()
+
+        except sr.UnknownValueError:
+            return ""
+
+        except sr.RequestError as error:
+            raise RuntimeError(
+                f"Reconnaissance vocale indisponible : {error}"
+            ) from error
+
+    def _synthesize_free(self, text, output_path):
+        """Voix française naturelle de Microsoft Edge (edge-tts)."""
+
+        import edge_tts
+
+        asyncio.run(
+            edge_tts.Communicate(
+                text,
+                self.edge_voice
+            ).save(str(output_path))
         )
 
     # =========================================================

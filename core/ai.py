@@ -1,7 +1,4 @@
 import json
-import os
-
-from openai import OpenAI
 
 
 class AIEngine:
@@ -10,22 +7,14 @@ class AIEngine:
         self,
         memory,
         tools,
-        model,
+        brain,
         confirmation_handler=None
     ):
 
         self.memory = memory
         self.tools = tools
-        self.model = model
+        self.brain = brain
         self.confirmation_handler = confirmation_handler
-
-        api_key = os.getenv("OPENAI_API_KEY")
-
-        self.client = (
-            OpenAI(api_key=api_key)
-            if api_key
-            else None
-        )
 
         self.system_prompt = """
 Tu es JARVIS, un assistant personnel intelligent.
@@ -58,30 +47,72 @@ Appareils :
   e-mails au lieu de tout recopier.
 """
 
-    def _input(self, message):
+    def _messages(self, message):
 
-        history = self.memory.recent_messages(20)
-
-        items = [
+        messages = [
             {
-                "role": "developer",
+                "role": "system",
                 "content": self.system_prompt
             }
         ]
 
-        items.extend(history)
+        messages.extend(
+            self.memory.recent_messages(20)
+        )
 
-        items.append({
+        messages.append({
             "role": "user",
             "content": message
         })
 
-        return items
+        return messages
+
+    @staticmethod
+    def _clean_schema(schema):
+        """
+        Gemini n'accepte qu'une partie de JSON Schema :
+        on retire additionalProperties et les listes vides.
+        """
+
+        if isinstance(schema, dict):
+            return {
+                key: AIEngine._clean_schema(value)
+                for key, value in schema.items()
+                if key != "additionalProperties"
+                and not (key == "required" and not value)
+            }
+
+        if isinstance(schema, list):
+            return [AIEngine._clean_schema(item) for item in schema]
+
+        return schema
+
+    def _tool_definitions(self):
+
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": definition["name"],
+                    "description": definition["description"],
+                    "parameters": self._clean_schema(
+                        definition["parameters"]
+                    ),
+                },
+            }
+            for definition in self.tools.api_definitions
+        ]
 
     def respond(self, message):
 
-        if not self.client:
-            return "La clé API OpenAI est absente."
+        if self.brain.client is None:
+            return (
+                f"La clé {self.brain.name} est absente : ajoute "
+                f"{self.brain.key_name} dans le fichier .env."
+            )
+
+        messages = self._messages(message)
+        tools = self._tool_definitions()
 
         self.memory.add_message(
             "user",
@@ -90,40 +121,53 @@ Appareils :
 
         try:
 
-            response = self.client.responses.create(
-                model=self.model,
-                input=self._input(message),
-                tools=self.tools.api_definitions
-            )
+            answer = None
 
-            while True:
+            for _ in range(8):
 
-                calls = [
-                    item
-                    for item in response.output
-                    if item.type == "function_call"
-                ]
+                reply = self.brain.chat(
+                    messages,
+                    tools
+                )
+
+                calls = reply.tool_calls or []
 
                 if not calls:
+                    answer = reply.content or ""
                     break
 
-                outputs = []
+                # L'appel d'outil est renvoyé tel quel avec son résultat.
+                messages.append({
+                    "role": "assistant",
+                    "content": reply.content,
+                    "tool_calls": [
+                        {
+                            "id": call.id,
+                            "type": "function",
+                            "function": {
+                                "name": call.function.name,
+                                "arguments": call.function.arguments,
+                            },
+                        }
+                        for call in calls
+                    ],
+                })
 
                 for call in calls:
 
                     try:
                         arguments = json.loads(
-                            call.arguments
+                            call.function.arguments or "{}"
                         )
                     except json.JSONDecodeError:
                         arguments = {}
 
                     print(
-                        f"\n🔧 Jarvis → {call.name}"
+                        f"\n🔧 Jarvis → {call.function.name}"
                     )
 
                     result = self.tools.execute(
-                        call.name,
+                        call.function.name,
                         arguments,
                         confirmation_handler=(
                             self.confirmation_handler
@@ -134,20 +178,16 @@ Appareils :
                         f"   ↳ {result}"
                     )
 
-                    outputs.append({
-                        "type": "function_call_output",
-                        "call_id": call.call_id,
-                        "output": str(result)
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": call.id,
+                        "content": str(result),
                     })
 
-                response = self.client.responses.create(
-                    model=self.model,
-                    previous_response_id=response.id,
-                    input=outputs,
-                    tools=self.tools.api_definitions
-                )
+            if answer is None:
+                answer = "Je n'ai pas pu terminer cette demande."
 
-            answer = response.output_text
+            answer = answer.strip() or "Je n'ai pas de réponse."
 
             self.memory.add_message(
                 "assistant",
@@ -158,6 +198,4 @@ Appareils :
 
         except Exception as error:
 
-            return (
-                f"Erreur du cerveau IA : {error}"
-            )
+            return self.brain.describe_error(error)

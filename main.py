@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 
 from core.activity import ActivityLogger
 from core.ai import AIEngine
+from core.brain import Brain
 from core.confirmation import ConfirmationService
 from core.events import EventBus
 from core.memory import Memory
@@ -27,6 +28,8 @@ BASE_DIR = Path(__file__).resolve().parent
 
 load_dotenv(BASE_DIR / ".env")
 
+# Modèle utilisé seulement si le cerveau est OpenAI (AI_PROVIDER=openai).
+# Avec Gemini (par défaut), le modèle est choisi automatiquement.
 MODEL = "gpt-5.6-luna"
 
 
@@ -149,10 +152,14 @@ def create_jarvis():
     # CERVEAU IA
     # =====================================================
 
+    brain = Brain.from_env(
+        openai_model=MODEL
+    )
+
     ai = AIEngine(
         memory=memory,
         tools=tools,
-        model=MODEL,
+        brain=brain,
         confirmation_handler=confirmation.ask,
     )
 
@@ -172,6 +179,7 @@ def create_jarvis():
     voice = VoiceInterface(
         orchestrator=orchestrator,
         base_dir=BASE_DIR,
+        brain=brain,
         state_manager=state_manager,
         event_bus=event_bus,
     )
@@ -192,18 +200,20 @@ def create_jarvis():
         "email": email,
         "event_bus": event_bus,
         "state_manager": state_manager,
+        "brain": brain,
     }
 
 
 def main():
 
     jarvis = create_jarvis()
+    brain = jarvis.pop("brain")
 
     print()
     print("╔══════════════════════════════════════╗")
     print("║              JARVIS                  ║")
     print("╠══════════════════════════════════════╣")
-    print(f"║ Modèle : {MODEL:<26}║")
+    print(f"║ Cerveau : {brain.name:<27}║")
     print("║ Mémoire : active                     ║")
     print("║ Événements : actifs                  ║")
     print("║ Journal : actif                       ║")
