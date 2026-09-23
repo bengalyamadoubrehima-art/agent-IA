@@ -12,8 +12,8 @@ android {
         applicationId = "com.jarvis.assistant"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
-        versionName = "1.5"
+        versionCode = 7
+        versionName = "1.6"
     }
 
     // Clé fixe : chaque nouvelle version s'installe par-dessus l'ancienne.

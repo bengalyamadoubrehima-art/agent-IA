@@ -37,6 +37,12 @@ class Assistant(
     private var geminiModel: String? = null
     private var geminiModelKey: String? = null
 
+    // Autres modèles Gemini gratuits, utilisés quand le principal est saturé.
+    private var geminiBackups: List<String> = GEMINI_BACKUPS
+
+    /** Erreur HTTP de l'API, avec son code pour décider s'il faut réessayer. */
+    private class ApiException(val code: Int, message: String) : IOException(message)
+
     suspend fun respond(message: String): String = withContext(Dispatchers.IO) {
         val provider = settings.provider
         val key = settings.apiKey
@@ -57,7 +63,7 @@ class Assistant(
         var answer: String? = null
 
         for (round in 0 until MAX_ROUNDS) {
-            val reply = chat(provider, key, model, messages, definitions)
+            val reply = chatWithFallback(provider, key, model, messages, definitions)
             val calls = reply.optJSONArray("tool_calls")
 
             if (calls == null || calls.length() == 0) {
@@ -113,6 +119,40 @@ class Assistant(
     // REQUÊTES
     // ========================================================
 
+    /**
+     * Gemini gratuit est parfois saturé (503) ou limité (429) : on patiente
+     * un peu, puis on essaie les autres modèles gratuits avant d'abandonner.
+     */
+    private fun chatWithFallback(
+        provider: String,
+        key: String,
+        model: String,
+        messages: JSONArray,
+        definitions: JSONArray,
+    ): JSONObject {
+        val autoGemini = provider == JarvisSettings.PROVIDER_GEMINI && settings.model.isBlank()
+
+        val attempts = buildList {
+            add(model)
+            add(model)
+            if (autoGemini) addAll(geminiBackups.filter { it != model })
+        }
+
+        var lastError: ApiException? = null
+
+        for ((index, candidate) in attempts.withIndex()) {
+            try {
+                return chat(provider, key, candidate, messages, definitions)
+            } catch (e: ApiException) {
+                if (e.code !in RETRYABLE) throw e
+                lastError = e
+                if (index < attempts.lastIndex) Thread.sleep(if (index == 0) 2000L else 800L)
+            }
+        }
+
+        throw lastError ?: IOException("Pas de réponse.")
+    }
+
     private fun chat(
         provider: String,
         key: String,
@@ -141,7 +181,7 @@ class Assistant(
             val text = response.body?.string().orEmpty()
 
             if (!response.isSuccessful) {
-                throw IOException(describeError(provider, response.code, text))
+                throw ApiException(response.code, describeError(provider, response.code, text))
             }
 
             return JSONObject(text)
@@ -161,6 +201,7 @@ class Assistant(
         return when (code) {
             429 -> "$name : limite de demandes atteinte pour le moment, réessaie dans une minute. ($detail)"
             400, 401, 403 -> "$name refuse la demande : vérifie ta clé dans les réglages. ($detail)"
+            500, 502, 503, 504 -> "$name est surchargé en ce moment (trop de monde l'utilise). Réessaie dans quelques secondes."
             404 -> "$name ne trouve pas le modèle : laisse le champ « Modèle » vide dans les réglages. ($detail)"
             else -> "$name ($code) : $detail"
         }
@@ -213,6 +254,8 @@ class Assistant(
             .map { it.optString("name").removePrefix("models/") }
             .filter { it.startsWith("gemini-") && "flash" in it }
 
+        geminiBackups = backupModels(names).ifEmpty { GEMINI_BACKUPS }
+
         return chooseGeminiModel(names)
     }
 
@@ -249,6 +292,10 @@ class Assistant(
         private const val OPENAI_URL = "https://api.openai.com/v1/"
         private const val GEMINI_FALLBACK = "gemini-2.5-flash"
 
+        private val GEMINI_BACKUPS = listOf("gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash")
+
+        private val RETRYABLE = setOf(429, 500, 502, 503, 504)
+
         private val EXCLUDED = listOf(
             "lite", "image", "tts", "audio", "live", "thinking", "exp", "embedding", "vision", "8b",
         )
@@ -264,6 +311,21 @@ class Assistant(
                         .thenBy { it.length }
                 )
                 .firstOrNull()
+        }
+
+        /** Modèles de secours : les Flash stables récents, puis les « lite » (au plus 4). */
+        fun backupModels(names: List<String>): List<String> {
+            val usable = names.filter { name ->
+                EXCLUDED.filter { it != "lite" }.none { it in name } && "preview" !in name && "latest" !in name
+            }
+
+            return usable
+                .sortedWith(
+                    compareBy<String> { "lite" in it }
+                        .thenByDescending { version(it) }
+                        .thenBy { it.length }
+                )
+                .take(4)
         }
 
         private fun version(name: String): Double =
