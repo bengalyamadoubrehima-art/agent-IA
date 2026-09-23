@@ -129,7 +129,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application),
         if (working || state == JarvisState.LISTENING) return
 
         val granted = ContextCompat.checkSelfPermission(
-            getApplication(), Manifest.permission.RECORD_AUDIO
+            getApplication<Application>(), Manifest.permission.RECORD_AUDIO
         ) == PackageManager.PERMISSION_GRANTED
 
         if (!granted) {
@@ -188,7 +188,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application),
 
             modules = Modules(
                 brain = settings.openAiKey.isNotBlank(),
-                whatsapp = WhatsAppService.isEnabled(getApplication()),
+                whatsapp = WhatsAppService.isEnabled(getApplication<Application>()),
                 gmail = gmail.isConfigured(),
                 pc = pcReachable,
             )
