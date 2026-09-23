@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">JARVIS</string>
+    <string name="accessibility_label">JARVIS — envoi WhatsApp</string>
+    <string name="accessibility_description">Permet à JARVIS d\'appuyer sur « Envoyer » dans WhatsApp quand tu lui demandes d\'envoyer un message. Le service ne s\'active que dans WhatsApp et ne lit rien d\'autre.</string>
+    <string name="shortcut_listen_short">Parler</string>
+    <string name="shortcut_listen_long">Parler à JARVIS</string>
+</resources>
