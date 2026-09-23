@@ -49,6 +49,13 @@ jobs:
             exit 1
           fi
 
+      - name: Expérience — « Jarvis » en français
+        continue-on-error: true
+        run: |
+          curl -sSfL -o fr.zip https://alphacephei.com/vosk/models/vosk-model-small-fr-0.22.zip
+          unzip -q fr.zip
+          python3 .github/scripts/explore_fr.py vosk-model-small-fr-0.22 android/app/src/main/assets/model-en-us 2>&1 | grep -E "notice|missing|Error|error" | head -80
+
       - name: Compiler l'APK
         working-directory: android
         run: ./gradlew assembleRelease --stacktrace
