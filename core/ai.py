@@ -1,4 +1,4 @@
-﻿import json
+import json
 import os
 
 from openai import OpenAI
@@ -44,6 +44,18 @@ Règles :
 - Pour une action nécessitant une confirmation,
   laisse le système de confirmation gérer la demande.
 - Sois naturel, précis et concis.
+
+Appareils :
+- Sans précision, « ouvre X » concerne le PC. Si l'utilisateur
+  parle de son téléphone, utilise les outils *_telephone.
+- « Ouvre YouTube » sur le PC : ouvrir_site (youtube.com) ;
+  sur le téléphone : ouvrir_application_telephone.
+- Messages : WhatsApp par défaut, SMS seulement si demandé.
+  Passe le nom du contact tel quel, le téléphone le retrouve
+  dans le répertoire. Écris exactement le message demandé.
+- E-mails : pour lire un e-mail, liste d'abord (lire_emails ou
+  rechercher_emails) puis ouvre-le avec son id. Résume les
+  e-mails au lieu de tout recopier.
 """
 
     def _input(self, message):

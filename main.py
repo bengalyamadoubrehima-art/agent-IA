@@ -1,4 +1,4 @@
-﻿from pathlib import Path
+from pathlib import Path
 
 from dotenv import load_dotenv
 
@@ -14,7 +14,9 @@ from core.state import StateManager
 from interfaces.desktop import run_desktop
 from interfaces.voice import VoiceInterface
 
+from services.android_adb import AndroidPhone
 from services.communication import CommunicationAgent
+from services.gmail import GmailService
 
 from tools.registry import ToolRegistry
 
@@ -26,6 +28,10 @@ BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
 
 MODEL = "gpt-5.6-luna"
+
+
+def email_ok():
+    return GmailService().is_configured()
 
 
 def create_jarvis():
@@ -111,7 +117,12 @@ def create_jarvis():
     # COMMUNICATION
     # =====================================================
 
+    phone = AndroidPhone()
+    email = GmailService()
+
     communication = CommunicationAgent()
+    communication.register_provider("telephone", phone)
+    communication.register_provider("email", email)
 
     # =====================================================
     # OUTILS
@@ -122,6 +133,8 @@ def create_jarvis():
         memory=memory,
         communication=communication,
         event_bus=event_bus,
+        phone=phone,
+        email=email,
     )
 
     tools.setup()
@@ -171,12 +184,20 @@ def create_jarvis():
 
     mobile.start()
 
-    return orchestrator, voice
+    return {
+        "orchestrator": orchestrator,
+        "voice": voice,
+        "confirmation": confirmation,
+        "phone": phone,
+        "email": email,
+        "event_bus": event_bus,
+        "state_manager": state_manager,
+    }
 
 
 def main():
 
-    orchestrator, voice = create_jarvis()
+    jarvis = create_jarvis()
 
     print()
     print("╔══════════════════════════════════════╗")
@@ -188,17 +209,15 @@ def main():
     print("║ Journal : actif                       ║")
     print("║ Permissions : actives                 ║")
     print("║ Outils PC : actifs                    ║")
-    print("║ Communication : prête                 ║")
+    print("║ Téléphone : Android (ADB)             ║")
+    print("║ Gmail : " + ("configuré" if email_ok() else "non configuré").ljust(29) + "║")
     print("║ Voix : active                         ║")
     print("╚══════════════════════════════════════╝")
     print()
 
     print("🚀 Lancement de JARVIS...")
 
-    return run_desktop(
-        orchestrator=orchestrator,
-        voice=voice,
-    )
+    return run_desktop(**jarvis)
 
 
 if __name__ == "__main__":

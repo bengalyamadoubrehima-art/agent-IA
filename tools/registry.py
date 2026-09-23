@@ -1,17 +1,21 @@
-﻿class ToolRegistry:
+class ToolRegistry:
 
     def __init__(
         self,
         permissions,
         memory,
         communication=None,
-        event_bus=None
+        event_bus=None,
+        phone=None,
+        email=None
     ):
 
         self.permissions = permissions
         self.memory = memory
         self.communication = communication
         self.event_bus = event_bus
+        self.phone = phone
+        self.email = email
 
         self.functions = {}
         self.definitions = {}
@@ -207,6 +211,38 @@
             BrowserTools.ouvrir_site
         )
 
+        self.register(
+            "rechercher_youtube",
+            "Lance une recherche YouTube sur le PC.",
+            {
+                "type": "object",
+                "properties": {
+                    "recherche": {
+                        "type": "string"
+                    }
+                },
+                "required": ["recherche"],
+                "additionalProperties": False,
+            },
+            BrowserTools.rechercher_youtube
+        )
+
+        self.register(
+            "recherche_web",
+            "Lance une recherche Google sur le PC.",
+            {
+                "type": "object",
+                "properties": {
+                    "recherche": {
+                        "type": "string"
+                    }
+                },
+                "required": ["recherche"],
+                "additionalProperties": False,
+            },
+            BrowserTools.recherche_web
+        )
+
         # ====================================================
         # PC
         # ====================================================
@@ -229,7 +265,7 @@
 
         self.register(
             "ouvrir_dossier_special",
-            "Ouvre un dossier Windows courant.",
+            "Ouvre un dossier utilisateur courant.",
             {
                 "type": "object",
                 "properties": {
@@ -289,22 +325,18 @@
 
         self.register(
             "ouvrir_application",
-            "Ouvre une application autorisée.",
+            (
+                "Ouvre une application installée sur le PC "
+                "(ex. : gestionnaire de fichiers, vs code, chrome, "
+                "spotify, discord, calculatrice, terminal, paramètres, "
+                "word, whatsapp…)."
+            ),
             {
                 "type": "object",
                 "properties": {
                     "nom": {
                         "type": "string",
-                        "enum": [
-                            "vscode",
-                            "visual studio code",
-                            "chrome",
-                            "google chrome",
-                            "notepad",
-                            "bloc-notes",
-                            "explorateur",
-                            "explorer",
-                        ],
+                        "description": "Nom de l'application, tel que dit par l'utilisateur.",
                     }
                 },
                 "required": ["nom"],
@@ -314,8 +346,24 @@
         )
 
         self.register(
+            "lister_applications",
+            "Liste les applications installées sur le PC.",
+            {
+                "type": "object",
+                "properties": {
+                    "filtre": {
+                        "type": "string",
+                        "description": "Texte à rechercher dans le nom (facultatif).",
+                    }
+                },
+                "additionalProperties": False,
+            },
+            PCAgent.lister_applications
+        )
+
+        self.register(
             "repertoire_utilisateur",
-            "Retourne le dossier utilisateur Windows.",
+            "Retourne le dossier utilisateur.",
             {
                 "type": "object",
                 "properties": {},
@@ -396,8 +444,8 @@
             self.register(
                 "envoyer_message",
                 (
-                    "Envoie un message à un contact "
-                    "via un service de communication connecté."
+                    "Envoie un message depuis le téléphone à un "
+                    "contact (nom du répertoire ou numéro)."
                 ),
                 {
                     "type": "object",
@@ -409,7 +457,9 @@
                             "type": "string"
                         },
                         "service": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": ["whatsapp", "sms"],
+                            "description": "whatsapp par défaut.",
                         },
                     },
                     "required": [
@@ -424,16 +474,13 @@
             self.register(
                 "appeler_contact",
                 (
-                    "Lance un appel vers un contact "
-                    "via un appareil connecté."
+                    "Appelle un contact depuis le téléphone "
+                    "(nom du répertoire ou numéro)."
                 ),
                 {
                     "type": "object",
                     "properties": {
                         "contact": {
-                            "type": "string"
-                        },
-                        "service": {
                             "type": "string"
                         },
                     },
@@ -447,20 +494,18 @@
 
             self.register(
                 "envoyer_email",
-                "Envoie un e-mail.",
+                "Envoie un e-mail depuis le compte Gmail.",
                 {
                     "type": "object",
                     "properties": {
                         "destinataire": {
-                            "type": "string"
+                            "type": "string",
+                            "description": "Adresse e-mail.",
                         },
                         "sujet": {
                             "type": "string"
                         },
                         "contenu": {
-                            "type": "string"
-                        },
-                        "service": {
                             "type": "string"
                         },
                     },
@@ -472,4 +517,167 @@
                     "additionalProperties": False,
                 },
                 communication_tools.envoyer_email
+            )
+
+        # ====================================================
+        # TÉLÉPHONE
+        # ====================================================
+
+        if self.phone:
+
+            self.register(
+                "ouvrir_application_telephone",
+                (
+                    "Ouvre une application sur le téléphone Android "
+                    "(youtube, whatsapp, instagram, appareil photo, "
+                    "parametres…)."
+                ),
+                {
+                    "type": "object",
+                    "properties": {
+                        "nom": {
+                            "type": "string"
+                        }
+                    },
+                    "required": ["nom"],
+                    "additionalProperties": False,
+                },
+                self.phone.ouvrir_application
+            )
+
+            self.register(
+                "ouvrir_lien_telephone",
+                "Ouvre un lien (site, vidéo…) sur le téléphone.",
+                {
+                    "type": "object",
+                    "properties": {
+                        "url": {
+                            "type": "string"
+                        }
+                    },
+                    "required": ["url"],
+                    "additionalProperties": False,
+                },
+                self.phone.ouvrir_lien
+            )
+
+            self.register(
+                "rechercher_youtube_telephone",
+                "Lance une recherche dans YouTube sur le téléphone.",
+                {
+                    "type": "object",
+                    "properties": {
+                        "recherche": {
+                            "type": "string"
+                        }
+                    },
+                    "required": ["recherche"],
+                    "additionalProperties": False,
+                },
+                self.phone.rechercher_youtube
+            )
+
+            self.register(
+                "rechercher_contact",
+                "Cherche un contact et son numéro dans le téléphone.",
+                {
+                    "type": "object",
+                    "properties": {
+                        "nom": {
+                            "type": "string"
+                        }
+                    },
+                    "required": ["nom"],
+                    "additionalProperties": False,
+                },
+                self.phone.rechercher_contact
+            )
+
+            self.register(
+                "raccrocher",
+                "Termine l'appel en cours sur le téléphone.",
+                {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": False,
+                },
+                self.phone.raccrocher
+            )
+
+            self.register(
+                "statut_telephone",
+                "Indique si le téléphone est connecté à JARVIS.",
+                {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": False,
+                },
+                self.phone.statut
+            )
+
+        # ====================================================
+        # GMAIL
+        # ====================================================
+
+        if self.email:
+
+            self.register(
+                "lire_emails",
+                (
+                    "Liste les derniers e-mails de la boîte de "
+                    "réception Gmail (expéditeur, sujet, id)."
+                ),
+                {
+                    "type": "object",
+                    "properties": {
+                        "nombre": {
+                            "type": "integer",
+                            "description": "5 par défaut, 25 maximum.",
+                        },
+                        "non_lus_seulement": {
+                            "type": "boolean"
+                        },
+                    },
+                    "additionalProperties": False,
+                },
+                self.email.lire_emails
+            )
+
+            self.register(
+                "rechercher_emails",
+                (
+                    "Recherche des e-mails Gmail avec la syntaxe "
+                    "Gmail (ex. : from:banque, subject:facture, "
+                    "is:unread, newer_than:7d)."
+                ),
+                {
+                    "type": "object",
+                    "properties": {
+                        "recherche": {
+                            "type": "string"
+                        },
+                        "nombre": {
+                            "type": "integer"
+                        },
+                    },
+                    "required": ["recherche"],
+                    "additionalProperties": False,
+                },
+                self.email.rechercher_emails
+            )
+
+            self.register(
+                "lire_email",
+                "Lit le contenu complet d'un e-mail à partir de son id.",
+                {
+                    "type": "object",
+                    "properties": {
+                        "identifiant": {
+                            "type": "string"
+                        }
+                    },
+                    "required": ["identifiant"],
+                    "additionalProperties": False,
+                },
+                self.email.lire_email
             )

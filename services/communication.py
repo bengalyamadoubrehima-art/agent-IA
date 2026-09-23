@@ -1,9 +1,10 @@
-﻿class CommunicationAgent:
+class CommunicationAgent:
     """
     Couche centrale de communication de Jarvis.
 
-    Les fournisseurs réels (Android, email, etc.) seront
-    branchés derrière cette interface.
+    Fournisseurs :
+        "telephone"  messages (WhatsApp, SMS) et appels
+        "email"      envoi d'e-mails
     """
 
     def __init__(self):
@@ -26,19 +27,20 @@
         self,
         contact,
         message,
-        service="mobile"
+        service="whatsapp"
     ):
-        provider = self._provider(service)
+        provider = self._provider("telephone")
 
         return provider.send_message(
             contact,
-            message
+            message,
+            application=service
         )
 
     def appeler_contact(
         self,
         contact,
-        service="mobile"
+        service="telephone"
     ):
         provider = self._provider(service)
 

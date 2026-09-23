@@ -1,4 +1,4 @@
-﻿class CommunicationTools:
+class CommunicationTools:
 
     def __init__(self, communication):
         self.communication = communication
@@ -7,7 +7,7 @@
         self,
         contact,
         message,
-        service="mobile"
+        service="whatsapp"
     ):
         return self.communication.envoyer_message(
             contact=contact,
@@ -18,7 +18,7 @@
     def appeler_contact(
         self,
         contact,
-        service="mobile"
+        service="telephone"
     ):
         return self.communication.appeler_contact(
             contact=contact,
