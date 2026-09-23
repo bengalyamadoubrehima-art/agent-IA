@@ -115,6 +115,104 @@ La lecture n'altère rien : les e-mails lus par JARVIS restent « non lus ».
 
 ---
 
+## 4. JARVIS sur le téléphone (application Android)
+
+JARVIS existe aussi en **application Android**, avec la même interface HUD. Tu lui
+parles directement sur le téléphone, où que tu sois : pas besoin du PC.
+
+**Ce qu'elle fait, directement sur le téléphone :** ouvrir les applications
+(YouTube, WhatsApp, appareil photo…), ouvrir des liens, lancer des recherches
+YouTube et Google, appeler un contact et raccrocher, envoyer des SMS et des
+messages WhatsApp, lire, rechercher et envoyer des e-mails Gmail. Elle peut aussi
+transmettre des ordres au PC quand il est allumé (« ouvre VS Code sur le PC »).
+
+La reconnaissance et la synthèse vocales sont celles d'Android : elles sont
+**gratuites**. Seul le « cerveau » utilise tes crédits OpenAI.
+
+### Installer l'application
+
+1. Sur le téléphone, ouvre la page **Releases** du dépôt GitHub
+   (`github.com/bengalyamadoubrehima-art/agent-IA/releases`), puis la version
+   **JARVIS Android**.
+2. Touche **JARVIS.apk** pour la télécharger, puis ouvre le fichier.
+3. Android demande d'autoriser l'installation depuis cette source : accepte.
+   Play Protect peut afficher un avertissement, car l'application ne vient pas du
+   Play Store : choisis « Installer quand même ».
+4. Ouvre JARVIS et accepte les permissions : micro, contacts, appels et SMS.
+
+Chaque modification de l'application sur GitHub recompile automatiquement l'APK.
+Pour mettre à jour, retélécharge-le et installe-le par-dessus : tes réglages sont
+conservés.
+
+### Configurer l'application
+
+Touche l'icône ⚙ en haut à droite :
+
+- **Clé API OpenAI** et **Modèle** : la même clé que sur le PC.
+- **Gmail** : ton adresse et ton mot de passe d'application.
+- **Indicatif pays** : `223` pour le Mali.
+- **Lien avec le PC** (facultatif) : l'adresse IP du PC et le jeton
+  `ANDROID_BRIDGE_TOKEN` de ton `.env`. Le PC doit être allumé avec
+  `python main.py` lancé. Si Windows demande d'autoriser Python sur le réseau,
+  accepte.
+
+### Envoi WhatsApp automatique
+
+Pour que JARVIS appuie lui-même sur « Envoyer » dans WhatsApp, touche
+**Activer l'envoi WhatsApp automatique**, puis active **JARVIS — envoi WhatsApp**
+dans la liste.
+
+- Ce service ne fonctionne que dans WhatsApp, et seulement quand JARVIS vient d'y
+  préparer un message.
+- Sur Android 13 et plus, Android peut indiquer « paramètre restreint ». Dans ce
+  cas, ouvre *Paramètres → Applications → JARVIS*, touche ⋮ en haut à droite, puis
+  **Autoriser les paramètres restreints**, et réessaie.
+- Sans ce service, JARVIS ouvre la conversation avec le message déjà écrit : il ne
+  te reste qu'à appuyer sur Envoyer.
+
+### Dire « Jarvis » sans ouvrir l'application
+
+JARVIS peut écouter le mot **« Jarvis »** en permanence, même quand
+l'application est fermée ou que l'écran est éteint. Dis « Jarvis », attends le
+petit bip, puis donne ton ordre : « ouvre YouTube », « appelle Maman »…
+JARVIS l'exécute et répond à voix haute, sans ouvrir l'application. Avant un
+message ou un appel, il demande « Je confirme ? » : réponds « oui » ou « non ».
+
+Mise en place, une seule fois :
+
+1. Crée un compte gratuit sur **console.picovoice.ai** et copie ta clé
+   **AccessKey**. Picovoice est le moteur qui reconnaît « Jarvis » : il tourne
+   sur le téléphone, sans internet, et consomme peu de batterie. Vérifie sur leur
+   site les conditions de l'offre gratuite.
+2. Dans les réglages de JARVIS, colle-la dans **Clé Picovoice**, puis
+   **Enregistrer**.
+3. Touche **Autoriser l'ouverture d'applis en arrière-plan** et active
+   l'autorisation. Sans elle, Android empêche JARVIS d'ouvrir une application
+   quand tu n'es pas dans JARVIS.
+4. Touche **Empêcher Android de couper l'écoute** et accepte. Sinon, beaucoup de
+   téléphones (Samsung, Xiaomi, Tecno, Infinix…) coupent l'écoute au bout d'un
+   moment.
+5. Sur l'écran principal, touche le module **ÉCOUTE** : il s'allume.
+
+Bon à savoir :
+
+- Android impose une **notification permanente** « JARVIS » tant que l'écoute est
+  active. Elle contient un bouton pour l'arrêter.
+- « Jarvis » est reconnu avec un modèle anglais : prononce-le clairement,
+  « djar-vis ».
+- Après un redémarrage du téléphone, ouvre JARVIS une fois pour relancer
+  l'écoute : Android interdit de rallumer le micro tout seul au démarrage.
+- Téléphone verrouillé : les appels et les réponses vocales fonctionnent, mais
+  pour ouvrir une application ou envoyer un message WhatsApp, il faut
+  déverrouiller.
+
+### Astuce
+
+Appuie longuement sur l'icône JARVIS : le raccourci **Parler à JARVIS** ouvre
+directement le micro. Tu peux aussi le glisser sur ton écran d'accueil.
+
+---
+
 ## Architecture
 
 ```
@@ -128,7 +226,9 @@ tools/browser.py          sites, recherches Google / YouTube
 tools/registry.py         déclaration de tous les outils disponibles pour l'IA
 services/android_adb.py   téléphone : applications, contacts, WhatsApp, SMS, appels
 services/gmail.py         Gmail : lecture, recherche, envoi
-mobile/server.py          serveur WebSocket (port 8765) pour discuter avec JARVIS depuis un client mobile
+mobile/server.py          serveur WebSocket (port 8765) : l'app Android envoie ses ordres au PC par là
+android/                  application Android (Kotlin + Jetpack Compose)
+.github/workflows/        compilation automatique de l'APK et publication dans les Releases
 ```
 
 Les droits de chaque outil (autorisé, confirmation, bloqué) se règlent dans
