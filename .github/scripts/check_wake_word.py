@@ -2,7 +2,8 @@
 Vérifie que le modèle Vosk embarqué dans l'application reconnaît
 le mot « Jarvis », avec la même grammaire que WakeWordService.
 
-Le mot est prononcé par une voix de synthèse (espeak-ng), en
+Le mot est prononcé par une voix de synthèse (espeak-ng, converti en
+16 kHz avec sox), en
 anglais puis en français. L'échec en anglais bloque la compilation ;
 les autres cas sont affichés pour information.
 """
@@ -20,8 +21,7 @@ GRAMMAR = '["jarvis", "[unk]"]'
 def synthesize(text, voice):
     subprocess.run(["espeak-ng", "-v", voice, "-s", "140", "-w", "raw.wav", text], check=True)
     subprocess.run(
-        ["ffmpeg", "-loglevel", "error", "-y", "-i", "raw.wav",
-         "-ar", "16000", "-ac", "1", "-sample_fmt", "s16", "speech.wav"],
+        ["sox", "raw.wav", "-r", "16000", "-c", "1", "-b", "16", "speech.wav"],
         check=True,
     )
 
