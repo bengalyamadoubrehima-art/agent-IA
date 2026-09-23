@@ -12,8 +12,8 @@ android {
         applicationId = "com.jarvis.assistant"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = 3
+        versionName = "1.2"
     }
 
     // Clé fixe : chaque nouvelle version s'installe par-dessus l'ancienne.
@@ -80,8 +80,9 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
-    // Mot d'activation « Jarvis » (Picovoice Porcupine)
-    implementation("ai.picovoice:porcupine-android:4.0.2")
+    // Mot d'activation « Jarvis » (Vosk, hors ligne, sans compte)
+    implementation("com.alphacephei:vosk-android:0.3.75")
+    implementation("net.java.dev.jna:jna:5.18.1@aar")
 
     // Gmail (IMAP / SMTP)
     implementation("com.sun.mail:android-mail:1.6.7")

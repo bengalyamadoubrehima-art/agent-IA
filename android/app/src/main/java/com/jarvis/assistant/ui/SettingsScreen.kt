@@ -57,7 +57,6 @@ fun SettingsScreen(
     var pcAddress by remember { mutableStateOf(settings.pcAddress) }
     var pcToken by remember { mutableStateOf(settings.pcToken) }
     var speakReplies by remember { mutableStateOf(settings.speakReplies) }
-    var picovoiceKey by remember { mutableStateOf(settings.picovoiceKey) }
 
     fun save() {
         settings.openAiKey = openAiKey
@@ -69,7 +68,6 @@ fun SettingsScreen(
         settings.pcAddress = pcAddress
         settings.pcToken = pcToken
         settings.speakReplies = speakReplies
-        settings.picovoiceKey = picovoiceKey
         onClose()
     }
 
@@ -127,13 +125,12 @@ fun SettingsScreen(
 
         Section("MOT D'ACTIVATION « JARVIS »")
         Text(
-            "Dis « Jarvis » même quand l'application est fermée. Nécessite une clé gratuite " +
-                "Picovoice (console.picovoice.ai). Active ensuite le module ÉCOUTE sur l'écran principal.",
+            "Dis « Jarvis » même quand l'application est fermée : active le module ÉCOUTE " +
+                "sur l'écran principal. Les deux autorisations ci-dessous l'aident à bien fonctionner.",
             color = Muted,
             fontSize = 11.sp,
             lineHeight = 16.sp,
         )
-        HudField("Clé Picovoice (AccessKey)", picovoiceKey, { picovoiceKey = it }, secret = true)
         HudButton("Autoriser l'ouverture d'applis en arrière-plan", Modifier.fillMaxWidth()) {
             onOpenOverlay()
         }

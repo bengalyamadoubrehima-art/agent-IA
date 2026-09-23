@@ -98,11 +98,6 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        if (core.settings.picovoiceKey.isBlank()) {
-            core.note("Ajoute d'abord ta clé Picovoice dans les réglages (section « Mot d'activation »).")
-            return
-        }
-
         core.settings.wakeEnabled = true
         WakeWordService.start(this)
         core.note("Écoute de « Jarvis » activée : tu peux fermer l'application.")
