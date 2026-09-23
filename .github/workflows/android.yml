@@ -54,8 +54,8 @@ jobs:
         run: |
           curl -sSfL -o fr.zip https://alphacephei.com/vosk/models/vosk-model-small-fr-0.22.zip
           unzip -q fr.zip
-          python3 .github/scripts/explore_fr.py vosk-model-small-fr-0.22 android/app/src/main/assets/model-en-us 2>&1 | tee explore.log | grep -E "notice|Error|error" | head -40
-          grep -q "missing in vocabulary" explore.log && echo "::notice::VOCABULAIRE : mot manquant" || echo "::notice::VOCABULAIRE : jarvis present dans les deux modeles"
+          python3 .github/scripts/explore_fr.py vosk-model-small-fr-0.22 android/app/src/main/assets/model-en-us 2>&1 | tee explore.log | grep -E "notice|Error|error|missing" | head -60
+          grep -q "missing in vocabulary" explore.log && echo "::warning::VOCABULAIRE : $(grep -o "missing in vocabulary[^,]*" explore.log | sort -u | tr "\n" " ")" || echo "::notice::VOCABULAIRE : jarvis present dans les deux modeles"
 
       - name: Compiler l'APK
         working-directory: android
