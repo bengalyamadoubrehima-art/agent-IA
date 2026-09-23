@@ -170,6 +170,42 @@ dans la liste.
 - Sans ce service, JARVIS ouvre la conversation avec le message déjà écrit : il ne
   te reste qu'à appuyer sur Envoyer.
 
+### Dire « Jarvis » sans ouvrir l'application
+
+JARVIS peut écouter le mot **« Jarvis »** en permanence, même quand
+l'application est fermée ou que l'écran est éteint. Dis « Jarvis », attends le
+petit bip, puis donne ton ordre : « ouvre YouTube », « appelle Maman »…
+JARVIS l'exécute et répond à voix haute, sans ouvrir l'application. Avant un
+message ou un appel, il demande « Je confirme ? » : réponds « oui » ou « non ».
+
+Mise en place, une seule fois :
+
+1. Crée un compte gratuit sur **console.picovoice.ai** et copie ta clé
+   **AccessKey**. Picovoice est le moteur qui reconnaît « Jarvis » : il tourne
+   sur le téléphone, sans internet, et consomme peu de batterie. Vérifie sur leur
+   site les conditions de l'offre gratuite.
+2. Dans les réglages de JARVIS, colle-la dans **Clé Picovoice**, puis
+   **Enregistrer**.
+3. Touche **Autoriser l'ouverture d'applis en arrière-plan** et active
+   l'autorisation. Sans elle, Android empêche JARVIS d'ouvrir une application
+   quand tu n'es pas dans JARVIS.
+4. Touche **Empêcher Android de couper l'écoute** et accepte. Sinon, beaucoup de
+   téléphones (Samsung, Xiaomi, Tecno, Infinix…) coupent l'écoute au bout d'un
+   moment.
+5. Sur l'écran principal, touche le module **ÉCOUTE** : il s'allume.
+
+Bon à savoir :
+
+- Android impose une **notification permanente** « JARVIS » tant que l'écoute est
+  active. Elle contient un bouton pour l'arrêter.
+- « Jarvis » est reconnu avec un modèle anglais : prononce-le clairement,
+  « djar-vis ».
+- Après un redémarrage du téléphone, ouvre JARVIS une fois pour relancer
+  l'écoute : Android interdit de rallumer le micro tout seul au démarrage.
+- Téléphone verrouillé : les appels et les réponses vocales fonctionnent, mais
+  pour ouvrir une application ou envoyer un message WhatsApp, il faut
+  déverrouiller.
+
 ### Astuce
 
 Appuie longuement sur l'icône JARVIS : le raccourci **Parler à JARVIS** ouvre

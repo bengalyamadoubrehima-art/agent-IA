@@ -27,6 +27,7 @@ import java.net.URLEncoder
 class PhoneTools(
     private val context: Context,
     private val settings: JarvisSettings,
+    private val appVisible: () -> Boolean = { true },
 ) {
 
     private val packageManager = context.packageManager
@@ -269,7 +270,8 @@ class PhoneTools(
                 "Pour que JARVIS envoie tout seul, active « JARVIS — envoi WhatsApp » dans ses réglages."
         }
 
-        val request = WhatsAppService.arm(packageName)
+        // Revenir sur JARVIS après l'envoi seulement si son écran était affiché.
+        val request = WhatsAppService.arm(packageName, returnToApp = appVisible())
 
         withContext(Dispatchers.Main) { start(intent) }
 

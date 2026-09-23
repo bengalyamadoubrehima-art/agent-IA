@@ -50,7 +50,7 @@ class WhatsAppService : AccessibilityService() {
         pending = null
         request.result.complete(true)
 
-        handler.postDelayed({ returnToJarvis() }, 700)
+        if (request.returnToApp) handler.postDelayed({ returnToJarvis() }, 700)
 
         return true
     }
@@ -81,6 +81,7 @@ class WhatsAppService : AccessibilityService() {
 
     private class Request(
         val packageName: String,
+        val returnToApp: Boolean,
         val result: CompletableDeferred<Boolean>,
     )
 
@@ -104,9 +105,9 @@ class WhatsAppService : AccessibilityService() {
             return enabled.split(':').any { entry -> names.any { it.equals(entry, ignoreCase = true) } }
         }
 
-        fun arm(packageName: String): CompletableDeferred<Boolean> {
+        fun arm(packageName: String, returnToApp: Boolean): CompletableDeferred<Boolean> {
             val result = CompletableDeferred<Boolean>()
-            pending = Request(packageName, result)
+            pending = Request(packageName, returnToApp, result)
             return result
         }
 

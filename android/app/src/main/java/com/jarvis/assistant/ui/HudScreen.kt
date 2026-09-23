@@ -89,7 +89,7 @@ import androidx.compose.ui.unit.sp
 import com.jarvis.assistant.ChatMessage
 import com.jarvis.assistant.ConfirmationRequest
 import com.jarvis.assistant.JarvisState
-import com.jarvis.assistant.JarvisViewModel
+import com.jarvis.assistant.JarvisCore
 import com.jarvis.assistant.Modules
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
@@ -106,9 +106,12 @@ import com.jarvis.assistant.Role as MessageRole
 
 @Composable
 fun JarvisApp(
-    vm: JarvisViewModel,
+    vm: JarvisCore,
     onRequestPermissions: () -> Unit,
     onOpenAccessibility: () -> Unit,
+    onToggleWake: () -> Unit,
+    onOpenOverlay: () -> Unit,
+    onOpenBattery: () -> Unit,
 ) {
     var showSettings by rememberSaveable { mutableStateOf(false) }
 
@@ -124,12 +127,15 @@ fun JarvisApp(
                 },
                 onRequestPermissions = onRequestPermissions,
                 onOpenAccessibility = onOpenAccessibility,
+                onOpenOverlay = onOpenOverlay,
+                onOpenBattery = onOpenBattery,
             )
         } else {
             HudScreen(
                 vm = vm,
                 onOpenSettings = { showSettings = true },
                 onOpenAccessibility = onOpenAccessibility,
+                onToggleWake = onToggleWake,
             )
         }
     }
@@ -198,9 +204,10 @@ private fun ScanBand() {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun HudScreen(
-    vm: JarvisViewModel,
+    vm: JarvisCore,
     onOpenSettings: () -> Unit,
     onOpenAccessibility: () -> Unit,
+    onToggleWake: () -> Unit,
 ) {
     var input by rememberSaveable { mutableStateOf("") }
 
@@ -227,7 +234,7 @@ private fun HudScreen(
 
         HudCore(vm.state, Modifier.fillMaxWidth().height(coreHeight))
 
-        ModulesRow(vm.modules, onOpenSettings, onOpenAccessibility)
+        ModulesRow(vm.modules, vm.wakeListening, onToggleWake, onOpenSettings, onOpenAccessibility)
 
         Conversation(vm.messages, Modifier.weight(1f).fillMaxWidth())
 
@@ -484,6 +491,8 @@ private fun HudCore(state: JarvisState, modifier: Modifier) {
 @Composable
 private fun ModulesRow(
     modules: Modules,
+    wakeListening: Boolean,
+    onToggleWake: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenAccessibility: () -> Unit,
 ) {
@@ -491,7 +500,7 @@ private fun ModulesRow(
         Modifier.fillMaxWidth().padding(vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        ModuleChip("CERVEAU", modules.brain, Modifier.weight(1f), onOpenSettings)
+        ModuleChip("ÉCOUTE", wakeListening, Modifier.weight(1f), onToggleWake)
         ModuleChip("WHATSAPP", modules.whatsapp, Modifier.weight(1f), onOpenAccessibility)
         ModuleChip("GMAIL", modules.gmail, Modifier.weight(1f), onOpenSettings)
         ModuleChip("PC", modules.pc, Modifier.weight(1f), onOpenSettings)

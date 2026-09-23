@@ -41,6 +41,15 @@ class JarvisSettings(context: Context) {
         get() = text("pc_token")
         set(value) = save("pc_token", value)
 
+    var picovoiceKey: String
+        get() = text("picovoice_key")
+        set(value) = save("picovoice_key", value)
+
+    /** Écoute du mot « Jarvis » en arrière-plan. */
+    var wakeEnabled: Boolean
+        get() = prefs.getBoolean("wake_enabled", false)
+        set(value) = prefs.edit().putBoolean("wake_enabled", value).apply()
+
     var speakReplies: Boolean
         get() = prefs.getBoolean("speak_replies", true)
         set(value) = prefs.edit().putBoolean("speak_replies", value).apply()

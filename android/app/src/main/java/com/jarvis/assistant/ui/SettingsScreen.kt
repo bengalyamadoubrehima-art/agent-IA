@@ -45,6 +45,8 @@ fun SettingsScreen(
     onClose: () -> Unit,
     onRequestPermissions: () -> Unit,
     onOpenAccessibility: () -> Unit,
+    onOpenOverlay: () -> Unit,
+    onOpenBattery: () -> Unit,
 ) {
     var openAiKey by remember { mutableStateOf(settings.openAiKey) }
     var model by remember { mutableStateOf(settings.model) }
@@ -55,6 +57,7 @@ fun SettingsScreen(
     var pcAddress by remember { mutableStateOf(settings.pcAddress) }
     var pcToken by remember { mutableStateOf(settings.pcToken) }
     var speakReplies by remember { mutableStateOf(settings.speakReplies) }
+    var picovoiceKey by remember { mutableStateOf(settings.picovoiceKey) }
 
     fun save() {
         settings.openAiKey = openAiKey
@@ -66,6 +69,7 @@ fun SettingsScreen(
         settings.pcAddress = pcAddress
         settings.pcToken = pcToken
         settings.speakReplies = speakReplies
+        settings.picovoiceKey = picovoiceKey
         onClose()
     }
 
@@ -119,6 +123,22 @@ fun SettingsScreen(
         }
         HudButton("Activer l'envoi WhatsApp automatique", Modifier.fillMaxWidth()) {
             onOpenAccessibility()
+        }
+
+        Section("MOT D'ACTIVATION « JARVIS »")
+        Text(
+            "Dis « Jarvis » même quand l'application est fermée. Nécessite une clé gratuite " +
+                "Picovoice (console.picovoice.ai). Active ensuite le module ÉCOUTE sur l'écran principal.",
+            color = Muted,
+            fontSize = 11.sp,
+            lineHeight = 16.sp,
+        )
+        HudField("Clé Picovoice (AccessKey)", picovoiceKey, { picovoiceKey = it }, secret = true)
+        HudButton("Autoriser l'ouverture d'applis en arrière-plan", Modifier.fillMaxWidth()) {
+            onOpenOverlay()
+        }
+        HudButton("Empêcher Android de couper l'écoute (batterie)", Modifier.fillMaxWidth()) {
+            onOpenBattery()
         }
 
         Section("LIEN AVEC LE PC")
