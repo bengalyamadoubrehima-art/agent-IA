@@ -4,4 +4,4 @@ local.properties
 .idea/
 *.iml
 # Modèle vocal Vosk, téléchargé à la compilation (voir .github/workflows/android.yml)
-app/src/main/assets/model-en-us/
+app/src/main/assets/model-fr/

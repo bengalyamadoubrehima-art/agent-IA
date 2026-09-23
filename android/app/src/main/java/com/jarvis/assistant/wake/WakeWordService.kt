@@ -32,8 +32,12 @@ import java.io.IOException
 /**
  * Écoute le mot « Jarvis » en arrière-plan, même quand l'application
  * est fermée, avec Vosk (reconnaissance vocale libre, hors ligne,
- * sans compte). Quand il est entendu, JARVIS émet un bip, écoute la
- * demande, l'exécute et répond à voix haute, sans ouvrir l'application.
+ * sans compte) et un modèle français : « Jarvis » est reconnu prononcé
+ * à la française comme à l'anglaise. Des mots « leurres » proches
+ * (« j'arrive », « service »…) évitent les faux déclenchements.
+ *
+ * Quand il est entendu, JARVIS émet un bip, écoute la demande,
+ * l'exécute et répond à voix haute, sans ouvrir l'application.
  *
  * Android impose une notification permanente tant que le micro est
  * utilisé en arrière-plan.
@@ -137,7 +141,9 @@ class WakeWordService : Service() {
         if (speech != null || destroyed) return
 
         try {
-            val newRecognizer = Recognizer(loaded, SAMPLE_RATE, GRAMMAR)
+            val grammar = assets.open(GRAMMAR_ASSET).bufferedReader().use { it.readText() }
+            val newRecognizer = Recognizer(loaded, SAMPLE_RATE, grammar)
+            newRecognizer.setWords(true)
             val newSpeech = SpeechService(newRecognizer, SAMPLE_RATE)
 
             recognizer = newRecognizer
@@ -161,17 +167,19 @@ class WakeWordService : Service() {
         recognizer = null
     }
 
+    // Seuls les résultats définitifs comptent : un résultat partiel peut
+    // encore hésiter entre « jarvis » et « j'arrive ».
     private val listener = object : RecognitionListener {
 
-        override fun onPartialResult(hypothesis: String?) {
-            detect(hypothesis, "partial")
-        }
+        override fun onPartialResult(hypothesis: String?) {}
 
         override fun onResult(hypothesis: String?) {
-            detect(hypothesis, "text")
+            detect(hypothesis)
         }
 
-        override fun onFinalResult(hypothesis: String?) {}
+        override fun onFinalResult(hypothesis: String?) {
+            detect(hypothesis)
+        }
 
         override fun onError(exception: Exception?) {
             fail("Écoute de « Jarvis » interrompue : ${exception?.message}")
@@ -180,16 +188,18 @@ class WakeWordService : Service() {
         override fun onTimeout() {}
     }
 
-    private fun detect(hypothesis: String?, key: String) {
-        val text = try {
-            JSONObject(hypothesis ?: return).optString(key)
+    private fun detect(hypothesis: String?) {
+        val words = try {
+            JSONObject(hypothesis ?: return).optJSONArray("result") ?: return
         } catch (e: Exception) {
             return
         }
 
-        if ("jarvis" in text.split(" ")) {
-            scope.launch { onWakeWord() }
-        }
+        val heard = (0 until words.length())
+            .map { words.getJSONObject(it) }
+            .any { it.optString("word") == "jarvis" && it.optDouble("conf", 0.0) >= MIN_CONFIDENCE }
+
+        if (heard) scope.launch { onWakeWord() }
     }
 
     private suspend fun onWakeWord() {
@@ -280,12 +290,13 @@ class WakeWordService : Service() {
         private const val ACTION_STOP = "com.jarvis.assistant.STOP_WAKE"
         private const val IDLE_TEXT = "Dis « Jarvis » pour me parler."
 
-        // Modèle anglais léger de Vosk, ajouté aux ressources à la compilation.
-        private const val MODEL_ASSET = "model-en-us"
+        // Modèle français léger de Vosk, ajouté aux ressources à la compilation.
+        private const val MODEL_ASSET = "model-fr"
         private const val SAMPLE_RATE = 16000f
 
-        // Vocabulaire limité : « jarvis » ou « autre chose ».
-        private const val GRAMMAR = "[\"jarvis\", \"[unk]\"]"
+        // « jarvis » + mots leurres, partagé avec le test de compilation.
+        private const val GRAMMAR_ASSET = "wake_grammar.json"
+        private const val MIN_CONFIDENCE = 0.5
 
         fun start(context: Context) {
             ContextCompat.startForegroundService(context, Intent(context, WakeWordService::class.java))

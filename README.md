@@ -197,13 +197,16 @@ Bon à savoir :
 
 - Android impose une **notification permanente** « JARVIS » tant que l'écoute est
   active. Elle contient un bouton pour l'arrêter.
-- « Jarvis » est reconnu avec un modèle anglais : prononce-le clairement,
-  « djar-vis », puis attends le bip avant de donner ton ordre.
+- « Jarvis » est reconnu avec un modèle **français** : prononce-le
+  naturellement, à la française ou à l'anglaise, puis attends le bip avant de
+  donner ton ordre. Des mots proches comme « j'arrive » ou « service » ne le
+  déclenchent pas.
 - Le modèle vocal (environ 40 Mo) est ajouté à l'application lors de la
-  compilation sur GitHub. Pour compiler toi-même avec Android Studio, télécharge
-  `vosk-model-small-en-us-0.15` sur alphacephei.com/vosk/models, décompresse-le
-  dans `android/app/src/main/assets/model-en-us/` et ajoute-y un fichier `uuid`
-  contenant une ligne de texte quelconque.
+  compilation sur GitHub, qui vérifie aussi automatiquement la détection de
+  « Jarvis » avant de publier. Pour compiler toi-même avec Android Studio,
+  télécharge `vosk-model-small-fr-0.22` sur alphacephei.com/vosk/models,
+  décompresse-le dans `android/app/src/main/assets/model-fr/` et ajoute-y un
+  fichier `uuid` contenant une ligne de texte quelconque.
 - Après un redémarrage du téléphone, ouvre JARVIS une fois pour relancer
   l'écoute : Android interdit de rallumer le micro tout seul au démarrage.
 - Téléphone verrouillé : les appels et les réponses vocales fonctionnent, mais

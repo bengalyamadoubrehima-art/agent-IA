@@ -1,35 +1,50 @@
 """
-Vérifie que le modèle Vosk embarqué dans l'application reconnaît
-le mot « Jarvis », avec la même grammaire que WakeWordService.
+Vérifie le mot d'activation « Jarvis » avant de publier l'application,
+avec le même modèle, la même grammaire (assets/wake_grammar.json) et le
+même seuil de confiance que WakeWordService.
 
-Le mot est prononcé par une voix de synthèse (espeak-ng, converti en
-16 kHz avec sox), en
-anglais puis en français. L'échec en anglais bloque la compilation ;
-les autres cas sont affichés pour information.
+Les phrases sont prononcées par une voix de synthèse (espeak-ng,
+convertie en 16 kHz avec sox). « Jarvis » doit être détecté dans
+toutes les phrases qui le contiennent, et dans aucune autre.
 """
 
 import json
 import subprocess
 import sys
 import wave
+from pathlib import Path
 
 from vosk import KaldiRecognizer, Model, SetLogLevel
 
-GRAMMAR = '["jarvis", "[unk]"]'
+MIN_CONFIDENCE = 0.5
+
+# (phrase, voix, doit déclencher)
+PHRASES = [
+    ("Jarvis", "fr", True),
+    ("Jarvis", "fr+m3", True),
+    ("Jarvis", "fr+f2", True),
+    ("Jarvis", "en-us", True),
+    ("Jarvis, ouvre YouTube", "fr", True),
+    ("Jarvis appelle maman", "fr+m3", True),
+    ("J'arrive dans cinq minutes", "fr", False),
+    ("J'arrive", "fr+f2", False),
+    ("Le service est fini", "fr", False),
+    ("C'est un bon service", "fr+m3", False),
+    ("Gervais arrive", "fr", False),
+    ("Ouvre YouTube", "fr", False),
+    ("Bonjour, comment ça va", "fr", False),
+]
 
 
 def synthesize(text, voice):
     subprocess.run(["espeak-ng", "-v", voice, "-s", "140", "-w", "raw.wav", text], check=True)
-    subprocess.run(
-        ["sox", "raw.wav", "-r", "16000", "-c", "1", "-b", "16", "speech.wav"],
-        check=True,
-    )
+    subprocess.run(["sox", "raw.wav", "-r", "16000", "-c", "1", "-b", "16", "speech.wav"], check=True)
 
 
-def recognize(model, text, voice):
-    synthesize(text, voice)
-    recognizer = KaldiRecognizer(model, 16000, GRAMMAR)
-    heard = []
+def wake_word_heard(model, grammar):
+    recognizer = KaldiRecognizer(model, 16000, grammar)
+    recognizer.SetWords(True)
+    words = []
 
     with wave.open("speech.wav") as audio:
         while True:
@@ -37,40 +52,33 @@ def recognize(model, text, voice):
             if not data:
                 break
             if recognizer.AcceptWaveform(data):
-                heard.append(json.loads(recognizer.Result())["text"])
+                words += json.loads(recognizer.Result()).get("result", [])
 
-    heard.append(json.loads(recognizer.FinalResult())["text"])
-    return " ".join(part for part in heard if part)
+    words += json.loads(recognizer.FinalResult()).get("result", [])
 
-
-def detected(text):
-    return "jarvis" in text.split()
+    heard = any(w["word"] == "jarvis" and w["conf"] >= MIN_CONFIDENCE for w in words)
+    return heard, " ".join(w["word"] for w in words)
 
 
 def main():
     SetLogLevel(0)
-    model = Model(sys.argv[1])
+    assets = Path(sys.argv[1])
+    model = Model(str(assets / "model-fr"))
+    grammar = (assets / "wake_grammar.json").read_text(encoding="utf-8")
 
-    required = recognize(model, "Jarvis", "en-us")
-    print(f"[anglais] « Jarvis » -> « {required} »")
+    failures = 0
 
-    checks = [
-        ("Jarvis", "fr", True),
-        ("Jarvis, ouvre YouTube", "fr", True),
-        ("Ouvre YouTube", "fr", False),
-        ("Bonjour, comment ça va", "fr", False),
-        ("J'arrive dans cinq minutes", "fr", False),
-    ]
+    for text, voice, expected in PHRASES:
+        synthesize(text, voice)
+        heard, words = wake_word_heard(model, grammar)
+        ok = heard == expected
+        failures += not ok
+        print(f"[{'ok' if ok else 'ÉCHEC'}] {voice} « {text} » -> « {words} »")
+        if not ok:
+            attendu = "détecté" if expected else "ignoré"
+            print(f"::error::Mot d'activation : « {text} » ({voice}) devait être {attendu}, entendu « {words} »")
 
-    for text, voice, expected in checks:
-        result = recognize(model, text, voice)
-        status = "ok" if detected(result) == expected else "À SURVEILLER"
-        print(f"[{voice}] « {text} » -> « {result} » ({status})")
-        if status != "ok":
-            print(f"::warning::Mot d'activation : « {text} » ({voice}) -> « {result} »")
-
-    if not detected(required):
-        print("::error::Le modèle ne reconnaît pas « Jarvis ».")
+    if failures:
         sys.exit(1)
 
 

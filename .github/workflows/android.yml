@@ -31,31 +31,22 @@ jobs:
 
       - name: Télécharger le modèle vocal (mot « Jarvis »)
         run: |
-          curl -sSfL -o model.zip https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip
+          curl -sSfL -o model.zip https://alphacephei.com/vosk/models/vosk-model-small-fr-0.22.zip
           unzip -q model.zip
-          rm -rf android/app/src/main/assets/model-en-us
-          mkdir -p android/app/src/main/assets
-          mv vosk-model-small-en-us-0.15 android/app/src/main/assets/model-en-us
-          echo "vosk-model-small-en-us-0.15" > android/app/src/main/assets/model-en-us/uuid
+          rm -rf android/app/src/main/assets/model-fr
+          mv vosk-model-small-fr-0.22 android/app/src/main/assets/model-fr
+          echo "vosk-model-small-fr-0.22" > android/app/src/main/assets/model-fr/uuid
 
       - name: Vérifier que « Jarvis » est reconnu
         run: |
           set -o pipefail
           sudo apt-get install -y -q espeak-ng sox > /dev/null
           pip install -q vosk
-          python3 .github/scripts/check_wake_word.py android/app/src/main/assets/model-en-us 2>&1 | tee wake-check.log
+          python3 .github/scripts/check_wake_word.py android/app/src/main/assets 2>&1 | tee wake-check.log
           if grep -q "missing in vocabulary" wake-check.log; then
-            echo "::error::« jarvis » est absent du vocabulaire du modèle."
+            echo "::error::Un mot de wake_grammar.json est absent du vocabulaire du modèle."
             exit 1
           fi
-
-      - name: Expérience — « Jarvis » en français
-        continue-on-error: true
-        run: |
-          curl -sSfL -o fr.zip https://alphacephei.com/vosk/models/vosk-model-small-fr-0.22.zip
-          unzip -q fr.zip
-          python3 .github/scripts/explore_fr.py vosk-model-small-fr-0.22 android/app/src/main/assets/model-en-us 2>&1 | tee explore.log | grep -E "notice|Error|error|missing" | head -60
-          grep -q "missing in vocabulary" explore.log && echo "::warning::VOCABULAIRE : $(grep -o "missing in vocabulary[^,]*" explore.log | sort -u | tr "\n" " ")" || echo "::notice::VOCABULAIRE : jarvis present dans les deux modeles"
 
       - name: Compiler l'APK
         working-directory: android
