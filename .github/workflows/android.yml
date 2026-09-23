@@ -5,6 +5,7 @@ on:
     paths:
       - "android/**"
       - ".github/workflows/android.yml"
+      - ".github/scripts/**"
   workflow_dispatch:
 
 permissions:
@@ -28,12 +29,31 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      - name: Télécharger le modèle vocal (mot « Jarvis »)
+        run: |
+          curl -sSfL -o model.zip https://alphacephei.com/vosk/models/vosk-model-small-fr-0.22.zip
+          unzip -q model.zip
+          rm -rf android/app/src/main/assets/model-fr
+          mv vosk-model-small-fr-0.22 android/app/src/main/assets/model-fr
+          echo "vosk-model-small-fr-0.22" > android/app/src/main/assets/model-fr/uuid
+
+      - name: Vérifier que « Jarvis » est reconnu
+        run: |
+          set -o pipefail
+          sudo apt-get install -y -q espeak-ng sox > /dev/null
+          pip install -q vosk
+          python3 .github/scripts/check_wake_word.py android/app/src/main/assets 2>&1 | tee wake-check.log
+          if grep -q "missing in vocabulary" wake-check.log; then
+            echo "::error::Un mot de wake_grammar.json est absent du vocabulaire du modèle."
+            exit 1
+          fi
+
       - name: Compiler l'APK
         working-directory: android
-        run: ./gradlew assembleDebug --stacktrace
+        run: ./gradlew assembleRelease --stacktrace
 
       - name: Renommer l'APK
-        run: cp android/app/build/outputs/apk/debug/app-debug.apk JARVIS.apk
+        run: cp android/app/build/outputs/apk/release/app-release.apk JARVIS.apk
 
       - uses: actions/upload-artifact@v4
         with:

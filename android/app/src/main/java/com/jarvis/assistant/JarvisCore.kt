@@ -75,6 +75,9 @@ class JarvisCore private constructor(private val context: Context) {
     /** Vrai quand le service du mot d'activation écoute « Jarvis ». */
     var wakeListening by mutableStateOf(false)
 
+    /** Mis en pause (true) / relancé (false) par l'écran quand il a besoin du micro. */
+    var wakeMicControl: ((Boolean) -> Unit)? = null
+
     /** Vrai quand l'écran de JARVIS est affiché. */
     @Volatile
     var uiVisible = false
@@ -101,7 +104,14 @@ class JarvisCore private constructor(private val context: Context) {
         if (busy || !micAllowed()) return
 
         scope.launch {
-            conversation.withLock { converse(beep = false) }
+            conversation.withLock {
+                wakeMicControl?.invoke(true)
+                try {
+                    converse(beep = false)
+                } finally {
+                    wakeMicControl?.invoke(false)
+                }
+            }
         }
     }
 
