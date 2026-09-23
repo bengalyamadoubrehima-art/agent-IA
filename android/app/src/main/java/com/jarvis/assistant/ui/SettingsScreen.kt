@@ -48,6 +48,8 @@ fun SettingsScreen(
     onOpenOverlay: () -> Unit,
     onOpenBattery: () -> Unit,
 ) {
+    var provider by remember { mutableStateOf(settings.provider) }
+    var geminiKey by remember { mutableStateOf(settings.geminiKey) }
     var openAiKey by remember { mutableStateOf(settings.openAiKey) }
     var model by remember { mutableStateOf(settings.model) }
     var gmailAddress by remember { mutableStateOf(settings.gmailAddress) }
@@ -59,6 +61,8 @@ fun SettingsScreen(
     var speakReplies by remember { mutableStateOf(settings.speakReplies) }
 
     fun save() {
+        settings.provider = provider
+        settings.geminiKey = geminiKey
         settings.openAiKey = openAiKey
         settings.model = model
         settings.gmailAddress = gmailAddress
@@ -90,9 +94,33 @@ fun SettingsScreen(
             letterSpacing = 4.sp,
         )
 
-        Section("CERVEAU — OPENAI")
-        HudField("Clé API OpenAI", openAiKey, { openAiKey = it }, secret = true)
-        HudField("Modèle", model, { model = it })
+        Section("CERVEAU")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            HudButton(
+                if (provider == JarvisSettings.PROVIDER_GEMINI) "● GEMINI (gratuit)" else "GEMINI (gratuit)",
+                Modifier.weight(1f),
+                primary = provider == JarvisSettings.PROVIDER_GEMINI,
+            ) { provider = JarvisSettings.PROVIDER_GEMINI }
+            HudButton(
+                if (provider == JarvisSettings.PROVIDER_OPENAI) "● OPENAI" else "OPENAI",
+                Modifier.weight(1f),
+                primary = provider == JarvisSettings.PROVIDER_OPENAI,
+            ) { provider = JarvisSettings.PROVIDER_OPENAI }
+        }
+
+        if (provider == JarvisSettings.PROVIDER_GEMINI) {
+            Text(
+                "Clé gratuite, sans carte bancaire : aistudio.google.com → « Get API key ».",
+                color = Muted,
+                fontSize = 11.sp,
+                lineHeight = 16.sp,
+            )
+            HudField("Clé API Gemini", geminiKey, { geminiKey = it }, secret = true)
+        } else {
+            HudField("Clé API OpenAI", openAiKey, { openAiKey = it }, secret = true)
+        }
+
+        HudField("Modèle (laisser vide = automatique)", model, { model = it })
 
         Section("GMAIL")
         HudField("Adresse Gmail", gmailAddress, { gmailAddress = it }, keyboardType = KeyboardType.Email)

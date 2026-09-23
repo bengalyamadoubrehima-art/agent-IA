@@ -6,3 +6,5 @@ numpy
 PySide6
 websockets
 psutil
+SpeechRecognition
+edge-tts

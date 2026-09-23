@@ -2,10 +2,17 @@ from core.state import (
     JarvisState,
     StateManager,
 )
-from core.planner import Planner
 
 
 class Orchestrator:
+    """
+    Reçoit les demandes (texte, voix, téléphone) et les confie au
+    cerveau IA, qui enchaîne lui-même les outils nécessaires.
+
+    Une seule requête au cerveau par demande (plus d'étape de
+    planification séparée) : c'est plus rapide et ça économise le
+    quota gratuit de Gemini.
+    """
 
     def __init__(
         self,
@@ -18,10 +25,6 @@ class Orchestrator:
         self.state = (
             state_manager
             or StateManager()
-        )
-
-        self.planner = Planner(
-            ai=self.ai
         )
 
     def handle(self, message):
@@ -37,61 +40,15 @@ class Orchestrator:
 
         try:
 
-            plan = self.planner.create_plan(
+            response = self.ai.respond(
                 message
             )
-
-            if not plan:
-                response = self.ai.respond(
-                    message
-                )
-
-                self.state.set_state(
-                    JarvisState.IDLE
-                )
-
-                return response
-
-            results = []
-
-            print()
-            print("🧠 Plan JARVIS :")
-
-            for index, step in enumerate(
-                plan,
-                start=1
-            ):
-
-                description = step.get(
-                    "description",
-                    ""
-                ).strip()
-
-                if not description:
-                    continue
-
-                print(
-                    f"   {index}. {description}"
-                )
-
-                self.state.set_state(
-                    JarvisState.EXECUTING
-                )
-
-                result = self.ai.respond(
-                    description
-                )
-
-                results.append(result)
 
             self.state.set_state(
                 JarvisState.IDLE
             )
 
-            if len(results) == 1:
-                return results[0]
-
-            return "\n".join(results)
+            return response
 
         except Exception:
 

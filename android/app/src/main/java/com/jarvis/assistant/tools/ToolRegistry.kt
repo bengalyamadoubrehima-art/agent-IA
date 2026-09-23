@@ -134,14 +134,19 @@ class ToolRegistry(
         ) { pc.send(it.optString("commande")) },
     )
 
+    /** Définitions au format « Chat Completions » (Gemini et OpenAI). */
     fun definitions(): JSONArray = JSONArray().apply {
         for (tool in tools) {
             put(
                 JSONObject()
                     .put("type", "function")
-                    .put("name", tool.name)
-                    .put("description", tool.description)
-                    .put("parameters", tool.parameters)
+                    .put(
+                        "function",
+                        JSONObject()
+                            .put("name", tool.name)
+                            .put("description", tool.description)
+                            .put("parameters", tool.parameters)
+                    )
             )
         }
     }
@@ -177,11 +182,11 @@ class ToolRegistry(
                 if (description != null) put("description", description)
             }
 
+        // Schéma volontairement simple : Gemini n'accepte qu'une partie de JSON Schema.
         fun params(vararg properties: Pair<String, JSONObject>, required: List<String> = emptyList()): JSONObject =
             JSONObject()
                 .put("type", "object")
                 .put("properties", JSONObject().apply { properties.forEach { (key, value) -> put(key, value) } })
-                .put("required", JSONArray(required))
-                .put("additionalProperties", false)
+                .apply { if (required.isNotEmpty()) put("required", JSONArray(required)) }
     }
 }
