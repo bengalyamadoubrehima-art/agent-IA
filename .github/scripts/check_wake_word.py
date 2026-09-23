@@ -69,6 +69,20 @@ def main():
         if status != "ok":
             print(f"::warning::Mot d'activation : « {text} » ({voice}) -> « {result} »")
 
+    # Exploration : ce que le modèle entend sans grammaire (pour trouver
+    # les variantes de « Jarvis » prononcé à la française).
+    free = KaldiRecognizer(model, 16000)
+    for text, voice in [("Jarvis", "fr"), ("Jarvice", "fr"), ("Djarvisse", "fr"), ("Jarvis", "en-us")]:
+        synthesize(text, voice)
+        free = KaldiRecognizer(model, 16000)
+        with wave.open("speech.wav") as audio:
+            while True:
+                data = audio.readframes(4000)
+                if not data:
+                    break
+                free.AcceptWaveform(data)
+        print(f"[libre {voice}] « {text} » -> « {json.loads(free.FinalResult())['text']} »")
+
     if not detected(required):
         print("::error::Le modèle ne reconnaît pas « Jarvis ».")
         sys.exit(1)
