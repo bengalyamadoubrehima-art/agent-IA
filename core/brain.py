@@ -73,6 +73,8 @@ class Brain:
             self.client = OpenAI(
                 api_key=api_key,
                 base_url=GEMINI_URL if provider == "gemini" else None,
+                # Gemini gratuit est parfois saturé (503) : on réessaie plus longtemps.
+                max_retries=5,
             )
 
     @classmethod
@@ -167,5 +169,8 @@ class Brain:
 
         if isinstance(error, APIStatusError) and error.status_code == 400:
             return f"{self.name} refuse la demande ({error.message}). Vérifie {self.key_name} dans le fichier .env."
+
+        if isinstance(error, APIStatusError) and error.status_code >= 500:
+            return f"{self.name} est surchargé en ce moment, réessaie dans quelques secondes."
 
         return f"Erreur du cerveau IA ({self.name}) : {error}"

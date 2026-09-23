@@ -160,7 +160,15 @@ class JarvisCore private constructor(private val context: Context) {
             assistant.respond(message)
         } catch (e: Exception) {
             failed = true
-            "Erreur : ${e.message}"
+            when (e) {
+                is java.net.UnknownHostException, is java.net.ConnectException ->
+                    "Pas d'accès à Internet : le téléphone n'arrive pas à joindre les serveurs de Google. " +
+                        "Ce n'est pas la clé. Vérifie ta connexion (Wi-Fi ou données mobiles), " +
+                        "le DNS privé, un VPN ou l'économiseur de données, puis réessaie."
+                is java.net.SocketTimeoutException ->
+                    "La connexion est trop lente : Google n'a pas répondu à temps. Réessaie."
+                else -> "Erreur : ${e.message}"
+            }
         }
 
         messages += ChatMessage(Role.JARVIS, answer)
