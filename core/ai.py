@@ -136,19 +136,14 @@ Appareils :
                     answer = reply.content or ""
                     break
 
-                # L'appel d'outil est renvoyé tel quel avec son résultat.
+                # L'appel d'outil est renvoyé tel quel avec son résultat,
+                # y compris la « thought_signature » exigée par Gemini
+                # (champ extra_content).
                 messages.append({
                     "role": "assistant",
                     "content": reply.content,
                     "tool_calls": [
-                        {
-                            "id": call.id,
-                            "type": "function",
-                            "function": {
-                                "name": call.function.name,
-                                "arguments": call.function.arguments,
-                            },
-                        }
+                        call.model_dump(exclude_none=True)
                         for call in calls
                     ],
                 })

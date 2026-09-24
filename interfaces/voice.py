@@ -316,7 +316,12 @@ class VoiceInterface:
     def _transcribe_free(audio_path):
         """Reconnaissance vocale gratuite de Google (français)."""
 
-        import speech_recognition as sr
+        try:
+            import speech_recognition as sr
+        except ImportError as error:
+            raise RuntimeError(
+                "module manquant, lance : pip install -r requirements.txt"
+            ) from error
 
         recognizer = sr.Recognizer()
 
@@ -340,7 +345,12 @@ class VoiceInterface:
     def _synthesize_free(self, text, output_path):
         """Voix française naturelle de Microsoft Edge (edge-tts)."""
 
-        import edge_tts
+        try:
+            import edge_tts
+        except ImportError as error:
+            raise RuntimeError(
+                "module manquant, lance : pip install -r requirements.txt"
+            ) from error
 
         asyncio.run(
             edge_tts.Communicate(

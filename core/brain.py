@@ -16,6 +16,10 @@ from openai import (
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 GEMINI_MODELS_URL = "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000"
 GEMINI_FALLBACK = "gemini-2.5-flash"
+GEMINI_BACKUPS = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"]
+
+# Erreurs passagères : serveur saturé ou quota du modèle atteint.
+RETRYABLE = {429, 500, 502, 503, 504}
 
 EXCLUDED = ["lite", "image", "tts", "audio", "live", "thinking", "exp", "embedding", "vision", "8b"]
 
@@ -47,6 +51,25 @@ def choose_gemini_model(names):
     return sorted(candidates, key=lambda name: (-version(name), len(name)))[0]
 
 
+def backup_models(names):
+    """Modèles de secours : Flash stables récents, puis « lite » (au plus 4)."""
+
+    usable = [
+        name for name in names
+        if name.startswith("gemini-")
+        and "flash" in name
+        and not any(word in name for word in EXCLUDED if word != "lite")
+        and "preview" not in name
+        and "latest" not in name
+    ]
+
+    def version(name):
+        found = re.match(r"gemini-(\d+(?:\.\d+)?)", name)
+        return float(found.group(1)) if found else 0.0
+
+    return sorted(usable, key=lambda name: ("lite" in name, -version(name), len(name)))[:4]
+
+
 class Brain:
     """
     Cerveau de JARVIS au format « Chat Completions » :
@@ -66,6 +89,8 @@ class Brain:
         self.api_key = api_key
         self.openai_model = openai_model
         self._model = model or None
+        self._forced_model = bool(model)
+        self.backups = list(GEMINI_BACKUPS)
 
         self.client = None
 
@@ -74,7 +99,7 @@ class Brain:
                 api_key=api_key,
                 base_url=GEMINI_URL if provider == "gemini" else None,
                 # Gemini gratuit est parfois saturé (503) : on réessaie plus longtemps.
-                max_retries=5,
+                max_retries=2,
             )
 
     @classmethod
@@ -139,6 +164,8 @@ class Brain:
             if "generateContent" in model.get("supportedGenerationMethods", [])
         ]
 
+        self.backups = backup_models(names) or list(GEMINI_BACKUPS)
+
         return choose_gemini_model(names)
 
     # =========================================================
@@ -148,14 +175,26 @@ class Brain:
     def chat(self, messages, tools=None):
         """Envoie la conversation et renvoie le message de réponse."""
 
-        arguments = {"model": self.model, "messages": messages}
+        primary = self.model
+        candidates = [primary]
 
-        if tools:
-            arguments["tools"] = tools
+        # Gemini gratuit est parfois saturé : on essaie les autres modèles gratuits.
+        if self.provider == "gemini" and not self._forced_model:
+            candidates += [name for name in self.backups if name != primary]
 
-        response = self.client.chat.completions.create(**arguments)
+        for index, model in enumerate(candidates):
+            arguments = {"model": model, "messages": messages}
 
-        return response.choices[0].message
+            if tools:
+                arguments["tools"] = tools
+
+            try:
+                response = self.client.chat.completions.create(**arguments)
+                return response.choices[0].message
+
+            except APIStatusError as error:
+                if error.status_code not in RETRYABLE or index == len(candidates) - 1:
+                    raise
 
     def describe_error(self, error):
         if isinstance(error, RateLimitError):
