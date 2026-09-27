@@ -38,6 +38,8 @@ class Assistant(
     private var geminiModelKey: String? = null
 
     // Autres modèles Gemini gratuits, utilisés quand le principal est saturé.
+    private var reasoningSupported = true
+
     private var geminiBackups: List<String> = GEMINI_BACKUPS
 
     /** Erreur HTTP de l'API, avec son code pour décider s'il faut réessayer. */
@@ -146,7 +148,7 @@ class Assistant(
             } catch (e: ApiException) {
                 if (e.code !in RETRYABLE) throw e
                 lastError = e
-                if (index < attempts.lastIndex) Thread.sleep(if (index == 0) 2000L else 800L)
+                if (index < attempts.lastIndex) Thread.sleep(if (index == 0) 1000L else 300L)
             }
         }
 
@@ -165,13 +167,25 @@ class Assistant(
             .put("messages", messages)
             .put("tools", definitions)
 
-        val request = Request.Builder()
+        // Gemini « réfléchit » avant de répondre, ce qui ajoute plusieurs secondes :
+        // on coupe cette réflexion (« none » sur Gemini 2.x, « minimal » ensuite).
+        val fast = provider == JarvisSettings.PROVIDER_GEMINI && reasoningSupported
+        if (fast) body.put("reasoning_effort", if (model.startsWith("gemini-2")) "none" else "minimal")
+
+        fun request() = Request.Builder()
             .url(baseUrl(provider) + "chat/completions")
             .header("Authorization", "Bearer $key")
             .post(body.toString().toRequestBody("application/json".toMediaType()))
             .build()
 
-        val json = execute(request, provider)
+        val json = try {
+            execute(request(), provider)
+        } catch (e: ApiException) {
+            // Réglage refusé par ce modèle : on réessaie sans.
+            if (!fast || e.code != 400) throw e
+            body.remove("reasoning_effort")
+            execute(request(), provider).also { reasoningSupported = false }
+        }
 
         return json.getJSONArray("choices").getJSONObject(0).getJSONObject("message")
     }

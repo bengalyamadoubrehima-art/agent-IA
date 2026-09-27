@@ -51,6 +51,16 @@ def choose_gemini_model(names):
     return sorted(candidates, key=lambda name: (-version(name), len(name)))[0]
 
 
+def reasoning_effort(model):
+    """
+    Les modèles Gemini « réfléchissent » avant de répondre, ce qui ajoute
+    plusieurs secondes. Pour un assistant, on coupe cette réflexion :
+    « none » sur Gemini 2.x, « minimal » sur les versions suivantes.
+    """
+
+    return "none" if model.startswith("gemini-2") else "minimal"
+
+
 def backup_models(names):
     """Modèles de secours : Flash stables récents, puis « lite » (au plus 4)."""
 
@@ -91,6 +101,7 @@ class Brain:
         self._model = model or None
         self._forced_model = bool(model)
         self.backups = list(GEMINI_BACKUPS)
+        self._reasoning_supported = True
 
         self.client = None
 
@@ -188,8 +199,22 @@ class Brain:
             if tools:
                 arguments["tools"] = tools
 
+            if self.provider == "gemini" and self._reasoning_supported:
+                arguments["reasoning_effort"] = reasoning_effort(model)
+
             try:
-                response = self.client.chat.completions.create(**arguments)
+                try:
+                    response = self.client.chat.completions.create(**arguments)
+
+                except APIStatusError as error:
+                    # Réglage refusé par ce modèle : on réessaie sans.
+                    if error.status_code != 400 or "reasoning_effort" not in arguments:
+                        raise
+
+                    del arguments["reasoning_effort"]
+                    response = self.client.chat.completions.create(**arguments)
+                    self._reasoning_supported = False
+
                 return response.choices[0].message
 
             except APIStatusError as error:
