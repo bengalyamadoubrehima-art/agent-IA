@@ -156,6 +156,9 @@ def create_jarvis():
         openai_model=MODEL
     )
 
+    # Choix du modèle en arrière-plan : la première question va plus vite.
+    brain.warm_up()
+
     ai = AIEngine(
         memory=memory,
         tools=tools,

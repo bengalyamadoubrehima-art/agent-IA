@@ -546,7 +546,8 @@ private fun ModuleChip(label: String, on: Boolean, modifier: Modifier, onClick: 
 private fun Conversation(messages: List<ChatMessage>, modifier: Modifier) {
     val listState = rememberLazyListState()
 
-    LaunchedEffect(messages.size) {
+    // Suit aussi la réponse qui s'écrit au fil de l'eau.
+    LaunchedEffect(messages.size, messages.lastOrNull()?.text?.length) {
         if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
     }
 

@@ -27,7 +27,7 @@ class Orchestrator:
             or StateManager()
         )
 
-    def handle(self, message):
+    def handle(self, message, on_text=None):
 
         message = message.strip()
 
@@ -41,7 +41,8 @@ class Orchestrator:
         try:
 
             response = self.ai.respond(
-                message
+                message,
+                on_text=on_text
             )
 
             self.state.set_state(
