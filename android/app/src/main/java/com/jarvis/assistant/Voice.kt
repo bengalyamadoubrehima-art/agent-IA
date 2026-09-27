@@ -42,6 +42,10 @@ class Voice(private val context: Context) {
     private var pendingListen: CancellableContinuation<Heard>? = null
     private val pendingSpeech = HashMap<String, CancellableContinuation<Unit>>()
 
+    // Phrases en file d'attente (dites les unes après les autres).
+    private val queued = HashSet<String>()
+    private var lastQueued: String? = null
+
     val canListen: Boolean
         get() = SpeechRecognizer.isRecognitionAvailable(context)
 
@@ -171,13 +175,31 @@ class Voice(private val context: Context) {
     // PAROLE
     // ========================================================
 
-    /** Lit le texte à voix haute et attend la fin de la lecture. */
-    suspend fun speak(text: String) {
+    /**
+     * Ajoute une phrase à la file de lecture et rend la main tout de suite :
+     * JARVIS commence à parler pendant que la suite de la réponse arrive.
+     */
+    fun enqueue(text: String) {
         val engine = tts
-        if (engine == null || !ttsReady) return
+        val sentence = clean(text)
+        if (engine == null || !ttsReady || sentence.isEmpty()) return
+
+        val id = "jarvis-${System.nanoTime()}"
+        queued += id
+        lastQueued = id
+
+        if (engine.speak(sentence, TextToSpeech.QUEUE_ADD, null, id) != TextToSpeech.SUCCESS) {
+            queued -= id
+        }
+    }
+
+    /** Attend que toutes les phrases en file aient été dites. */
+    suspend fun awaitSpeech() {
+        val engine = tts ?: return
+        val id = lastQueued ?: return
+        if (id !in queued) return
 
         suspendCancellableCoroutine<Unit> { continuation ->
-            val id = "jarvis-${System.nanoTime()}"
             pendingSpeech[id] = continuation
 
             continuation.invokeOnCancellation {
@@ -186,22 +208,25 @@ class Voice(private val context: Context) {
                     engine.stop()
                 }
             }
-
-            if (engine.speak(clean(text), TextToSpeech.QUEUE_FLUSH, null, id) != TextToSpeech.SUCCESS) {
-                pendingSpeech.remove(id)
-                continuation.resume(Unit)
-            }
         }
     }
 
+    /** Lit le texte à voix haute (après ce qui est déjà en file) et attend la fin. */
+    suspend fun speak(text: String) {
+        enqueue(text)
+        awaitSpeech()
+    }
+
     private fun finishSpeech(id: String?) {
-        val continuation = pendingSpeech.remove(id ?: return) ?: return
+        if (id == null) return
+        queued -= id
+        val continuation = pendingSpeech.remove(id) ?: return
         if (continuation.isActive) continuation.resume(Unit)
     }
 
     fun stopSpeaking() {
         tts?.stop()
-        pendingSpeech.keys.toList().forEach { finishSpeech(it) }
+        (queued + pendingSpeech.keys).toList().forEach { finishSpeech(it) }
     }
 
     private fun clean(text: String): String =

@@ -8,6 +8,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
@@ -18,7 +19,10 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Cerveau de JARVIS : format « Chat Completions » avec appels d'outils,
- * compris par Google Gemini (gratuit, sans carte bancaire) et par OpenAI.
+ * compris par Google Gemini et Groq (gratuits, sans carte bancaire) et par OpenAI.
+ *
+ * Les réponses arrivent en continu (streaming) : la première phrase est
+ * affichée et dite pendant que la suite s'écrit.
  */
 class Assistant(
     private val settings: JarvisSettings,
@@ -33,22 +37,31 @@ class Assistant(
 
     private val history = ArrayList<JSONObject>()
 
-    // Modèle Gemini choisi automatiquement, mémorisé pour la clé en cours.
-    private var geminiModel: String? = null
-    private var geminiModelKey: String? = null
+    // Modèle choisi automatiquement, mémorisé pour le fournisseur et la clé en cours.
+    private var chosenModel: String? = null
+    private var chosenFor: String? = null
 
-    // Autres modèles Gemini gratuits, utilisés quand le principal est saturé.
-    private var geminiBackups: List<String> = GEMINI_BACKUPS
+    // Autres modèles gratuits, utilisés quand le principal est saturé.
+    private var backups: List<String> = emptyList()
+
+    private var reasoningSupported = true
+
+    @Volatile
+    private var lastNetwork = 0L
 
     /** Erreur HTTP de l'API, avec son code pour décider s'il faut réessayer. */
     private class ApiException(val code: Int, message: String) : IOException(message)
 
-    suspend fun respond(message: String): String = withContext(Dispatchers.IO) {
+    /**
+     * Répond à un message. [onText] reçoit la réponse morceau par morceau
+     * (depuis un thread d'arrière-plan).
+     */
+    suspend fun respond(message: String, onText: (String) -> Unit = {}): String = withContext(Dispatchers.IO) {
         val provider = settings.provider
         val key = settings.apiKey
 
         if (key.isBlank()) {
-            val name = if (provider == JarvisSettings.PROVIDER_OPENAI) "OpenAI" else "Gemini"
+            val name = JarvisSettings.providerName(provider)
             return@withContext "Ajoute ta clé $name dans les réglages de JARVIS (icône en haut à droite)."
         }
 
@@ -60,24 +73,30 @@ class Assistant(
         messages.put(JSONObject().put("role", "user").put("content", message))
 
         val definitions = tools.definitions()
-        var answer: String? = null
+        val parts = StringBuilder()
+        var finished = false
 
         for (round in 0 until MAX_ROUNDS) {
-            val reply = chatWithFallback(provider, key, model, messages, definitions)
+            var newRound = true
+
+            val reply = chatWithFallback(provider, key, model, messages, definitions) { chunk ->
+                // Espace entre le texte de deux tours (annonce puis confirmation).
+                val text = if (newRound && parts.isNotEmpty()) " " + chunk.trimStart() else chunk
+                newRound = false
+                parts.append(text)
+                onText(text)
+            }
+
             val calls = reply.optJSONArray("tool_calls")
 
             if (calls == null || calls.length() == 0) {
-                answer = if (reply.isNull("content")) "" else reply.optString("content")
+                finished = true
                 break
             }
 
-            // L'appel d'outil doit être renvoyé tel quel avec son résultat.
-            messages.put(
-                JSONObject()
-                    .put("role", "assistant")
-                    .put("content", if (reply.isNull("content")) JSONObject.NULL else reply.optString("content"))
-                    .put("tool_calls", calls)
-            )
+            // L'appel d'outil est renvoyé tel quel (avec la « thought_signature »
+            // de Gemini), suivi de son résultat.
+            messages.put(reply)
 
             for (i in 0 until calls.length()) {
                 val call = calls.getJSONObject(i)
@@ -100,14 +119,43 @@ class Assistant(
             }
         }
 
-        val text = answer?.trim().orEmpty().ifBlank {
-            if (answer == null) "Je n'ai pas pu terminer cette demande." else "Je n'ai pas de réponse."
+        val text = parts.toString().trim().ifBlank {
+            if (finished) "Je n'ai pas de réponse." else "Je n'ai pas pu terminer cette demande."
         }
 
         remember("user", message)
         remember("assistant", text)
 
         text
+    }
+
+    /**
+     * À appeler dès que l'utilisateur commence à parler : choisit le modèle et
+     * rouvre la connexion si elle dort, pendant qu'il parle encore.
+     */
+    suspend fun warmUp(): Unit = withContext(Dispatchers.IO) {
+        val provider = settings.provider
+        val key = settings.apiKey
+        if (key.isBlank()) return@withContext
+
+        try {
+            val fresh = chosenFor != provider + key
+            resolveModel(provider, key)
+
+            if (!fresh && System.currentTimeMillis() - lastNetwork > IDLE_MS) {
+                val url = if (provider == JarvisSettings.PROVIDER_GEMINI) {
+                    "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1"
+                } else {
+                    baseUrl(provider) + "models"
+                }
+
+                execute(authorized(Request.Builder().url(url), provider, key).build(), provider)
+            }
+        } catch (e: Exception) {
+            // Simple préchauffage : la vraie requête affichera l'erreur éventuelle.
+        }
+
+        Unit
     }
 
     private fun remember(role: String, content: String) {
@@ -120,8 +168,8 @@ class Assistant(
     // ========================================================
 
     /**
-     * Gemini gratuit est parfois saturé (503) ou limité (429) : on patiente
-     * un peu, puis on essaie les autres modèles gratuits avant d'abandonner.
+     * Les services gratuits sont parfois saturés (503) ou limités (429) : on
+     * patiente un instant, puis on essaie les autres modèles gratuits.
      */
     private fun chatWithFallback(
         provider: String,
@@ -129,64 +177,183 @@ class Assistant(
         model: String,
         messages: JSONArray,
         definitions: JSONArray,
+        onText: (String) -> Unit,
     ): JSONObject {
-        val autoGemini = provider == JarvisSettings.PROVIDER_GEMINI && settings.model.isBlank()
+        val automatic = provider != JarvisSettings.PROVIDER_OPENAI && settings.model.isBlank()
 
         val attempts = buildList {
             add(model)
             add(model)
-            if (autoGemini) addAll(geminiBackups.filter { it != model })
+            if (automatic) addAll(backups.filter { it != model })
         }
 
         var lastError: ApiException? = null
 
         for ((index, candidate) in attempts.withIndex()) {
-            try {
-                return chat(provider, key, candidate, messages, definitions)
+            val response = try {
+                openStream(provider, key, candidate, messages, definitions)
             } catch (e: ApiException) {
-                if (e.code !in RETRYABLE) throw e
+                if (!switchable(provider, e)) throw e
                 lastError = e
-                if (index < attempts.lastIndex) Thread.sleep(if (index == 0) 2000L else 800L)
+                if (index < attempts.lastIndex) Thread.sleep(if (index == 0) 1000L else 300L)
+                continue
             }
+
+            return readStream(response, onText)
         }
 
         throw lastError ?: IOException("Pas de réponse.")
     }
 
-    private fun chat(
+    private fun switchable(provider: String, error: ApiException): Boolean =
+        error.code in RETRYABLE ||
+            // Groq : appel d'outil mal formé par le modèle, un autre peut réussir.
+            (provider == JarvisSettings.PROVIDER_GROQ && error.code == 400 &&
+                error.message.orEmpty().contains("tool_use_failed"))
+
+    private fun openStream(
         provider: String,
         key: String,
         model: String,
         messages: JSONArray,
         definitions: JSONArray,
-    ): JSONObject {
+    ): Response {
         val body = JSONObject()
             .put("model", model)
             .put("messages", messages)
             .put("tools", definitions)
+            .put("stream", true)
 
-        val request = Request.Builder()
+        val effort = reasoningEffort(provider, model)?.takeIf { reasoningSupported }
+        if (effort != null) body.put("reasoning_effort", effort)
+
+        fun request() = authorized(Request.Builder(), provider, key)
             .url(baseUrl(provider) + "chat/completions")
-            .header("Authorization", "Bearer $key")
             .post(body.toString().toRequestBody("application/json".toMediaType()))
             .build()
 
-        val json = execute(request, provider)
-
-        return json.getJSONArray("choices").getJSONObject(0).getJSONObject("message")
-    }
-
-    private fun execute(request: Request, provider: String): JSONObject {
-        http.newCall(request).execute().use { response ->
-            val text = response.body?.string().orEmpty()
-
-            if (!response.isSuccessful) {
-                throw ApiException(response.code, describeError(provider, response.code, text))
-            }
-
-            return JSONObject(text)
+        return try {
+            open(request(), provider)
+        } catch (e: ApiException) {
+            // Réglage refusé par ce modèle : on réessaie sans.
+            if (effort == null || e.code != 400) throw e
+            body.remove("reasoning_effort")
+            open(request(), provider).also { reasoningSupported = false }
         }
     }
+
+    /** Lit la réponse au fil de l'eau et renvoie le message complet de l'assistant. */
+    private fun readStream(response: Response, onText: (String) -> Unit): JSONObject {
+        val text = StringBuilder()
+        val calls = ArrayList<JSONObject>()
+        val byIndex = HashMap<Int, JSONObject>()
+
+        response.use {
+            val source = response.body!!.source()
+
+            while (true) {
+                val line = source.readUtf8Line() ?: break
+                if (!line.startsWith("data:")) continue
+
+                val data = line.removePrefix("data:").trim()
+                if (data == "[DONE]") break
+                if (data.isEmpty()) continue
+
+                val chunk = JSONObject(data)
+                chunk.optJSONObject("error")?.let { error ->
+                    throw ApiException(error.optInt("code", 500), error.optString("message"))
+                }
+
+                val delta = chunk.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("delta") ?: continue
+
+                if (delta.has("content") && !delta.isNull("content")) {
+                    val piece = delta.optString("content")
+                    if (piece.isNotEmpty()) {
+                        text.append(piece)
+                        onText(piece)
+                    }
+                }
+
+                val parts = delta.optJSONArray("tool_calls") ?: continue
+
+                for (i in 0 until parts.length()) {
+                    val part = parts.getJSONObject(i)
+                    val index = if (part.has("index")) part.optInt("index") else null
+                    val id = part.optString("id")
+
+                    val found = (if (index != null) byIndex[index] else calls.lastOrNull())
+                        // Un nouvel identifiant = un nouvel appel.
+                        ?.takeUnless { id.isNotEmpty() && it.optString("id").let { old -> old.isNotEmpty() && old != id } }
+
+                    val current: JSONObject = found ?: JSONObject()
+                        .put("id", "")
+                        .put("type", "function")
+                        .put("function", JSONObject().put("name", "").put("arguments", ""))
+                        .also { created ->
+                            calls += created
+                            if (index != null) byIndex[index] = created
+                        }
+
+                    part.optJSONObject("function")?.let { function ->
+                        val target = current.getJSONObject("function")
+                        function.optString("name").takeIf { it.isNotEmpty() }?.let { target.put("name", it) }
+                        function.optString("arguments").takeIf { it.isNotEmpty() }?.let {
+                            target.put("arguments", target.optString("arguments") + it)
+                        }
+                    }
+
+                    // id, type et champs propres au fournisseur (ex. extra_content de Gemini).
+                    for (field in part.keys()) {
+                        if (field == "index" || field == "function") continue
+                        val value = part.get(field)
+                        if (value != JSONObject.NULL && value.toString().isNotEmpty()) current.put(field, value)
+                    }
+                }
+            }
+        }
+
+        lastNetwork = System.currentTimeMillis()
+
+        val message = JSONObject()
+            .put("role", "assistant")
+            .put("content", if (text.isEmpty()) JSONObject.NULL else text.toString())
+
+        if (calls.isNotEmpty()) {
+            calls.forEachIndexed { number, call ->
+                if (call.optString("id").isEmpty()) call.put("id", "call_$number")
+                val function = call.getJSONObject("function")
+                if (function.optString("arguments").isBlank()) function.put("arguments", "{}")
+            }
+            message.put("tool_calls", JSONArray(calls))
+        }
+
+        return message
+    }
+
+    private fun authorized(builder: Request.Builder, provider: String, key: String): Request.Builder =
+        if (provider == JarvisSettings.PROVIDER_GEMINI) {
+            builder.header("Authorization", "Bearer $key").header("x-goog-api-key", key)
+        } else {
+            builder.header("Authorization", "Bearer $key")
+        }
+
+    /** Ouvre la requête ; lève une [ApiException] si le serveur refuse. */
+    private fun open(request: Request, provider: String): Response {
+        val response = http.newCall(request).execute()
+
+        if (!response.isSuccessful) {
+            val text = response.use { it.body?.string().orEmpty() }
+            throw ApiException(response.code, describeError(provider, response.code, text))
+        }
+
+        return response
+    }
+
+    private fun execute(request: Request, provider: String): JSONObject =
+        open(request, provider).use { response ->
+            lastNetwork = System.currentTimeMillis()
+            JSONObject(response.body?.string().orEmpty())
+        }
 
     private fun describeError(provider: String, code: Int, body: String): String {
         val detail = try {
@@ -196,41 +363,52 @@ class Assistant(
             null
         } ?: body.take(300)
 
-        val name = if (provider == JarvisSettings.PROVIDER_OPENAI) "OpenAI" else "Gemini"
+        val name = JarvisSettings.providerName(provider)
 
         return when (code) {
             429 -> "$name : limite de demandes atteinte pour le moment, réessaie dans une minute. ($detail)"
-            400, 401, 403 -> "$name refuse la demande : vérifie ta clé dans les réglages. ($detail)"
             500, 502, 503, 504 -> "$name est surchargé en ce moment (trop de monde l'utilise). Réessaie dans quelques secondes."
+            400, 401, 403 -> "$name refuse la demande : vérifie ta clé dans les réglages. ($detail)"
             404 -> "$name ne trouve pas le modèle : laisse le champ « Modèle » vide dans les réglages. ($detail)"
             else -> "$name ($code) : $detail"
         }
     }
 
-    private fun baseUrl(provider: String): String =
-        if (provider == JarvisSettings.PROVIDER_OPENAI) OPENAI_URL else GEMINI_URL
+    private fun baseUrl(provider: String): String = when (provider) {
+        JarvisSettings.PROVIDER_OPENAI -> OPENAI_URL
+        JarvisSettings.PROVIDER_GROQ -> GROQ_URL
+        else -> GEMINI_URL
+    }
 
     // ========================================================
     // CHOIX DU MODÈLE
     // ========================================================
 
+    @Synchronized
     private fun resolveModel(provider: String, key: String): String {
         settings.model.trim().takeIf { it.isNotEmpty() }?.let { return it }
 
         if (provider == JarvisSettings.PROVIDER_OPENAI) return JarvisSettings.DEFAULT_OPENAI_MODEL
 
-        geminiModel?.takeIf { geminiModelKey == key }?.let { return it }
+        chosenModel?.takeIf { chosenFor == provider + key }?.let { return it }
 
         val chosen = try {
-            pickGeminiModel(key)
+            if (provider == JarvisSettings.PROVIDER_GROQ) pickGroqModel(key) else pickGeminiModel(key)
         } catch (e: Exception) {
             null
-        } ?: GEMINI_FALLBACK
+        }
 
-        geminiModel = chosen
-        geminiModelKey = key
+        if (chosen == null) {
+            backups = if (provider == JarvisSettings.PROVIDER_GROQ) emptyList() else GEMINI_BACKUPS
+        }
 
-        return chosen
+        val model = chosen ?: if (provider == JarvisSettings.PROVIDER_GROQ) GROQ_FALLBACK else GEMINI_FALLBACK
+
+        chosenModel = model
+        chosenFor = provider + key
+        reasoningSupported = true
+
+        return model
     }
 
     /**
@@ -254,9 +432,23 @@ class Assistant(
             .map { it.optString("name").removePrefix("models/") }
             .filter { it.startsWith("gemini-") && "flash" in it }
 
-        geminiBackups = backupModels(names).ifEmpty { GEMINI_BACKUPS }
+        backups = backupModels(names).ifEmpty { GEMINI_BACKUPS }
 
         return chooseGeminiModel(names)
+    }
+
+    /** Demande à Groq ses modèles et prend le meilleur de la liste de préférence. */
+    private fun pickGroqModel(key: String): String? {
+        val request = authorized(Request.Builder(), JarvisSettings.PROVIDER_GROQ, key)
+            .url(GROQ_URL + "models")
+            .build()
+
+        val data = execute(request, JarvisSettings.PROVIDER_GROQ).optJSONArray("data") ?: return null
+        val ranked = groqModels((0 until data.length()).map { data.getJSONObject(it).optString("id") })
+
+        backups = ranked.drop(1).take(3)
+
+        return ranked.firstOrNull()
     }
 
     private fun systemPrompt(): String {
@@ -266,8 +458,16 @@ class Assistant(
             Tu es JARVIS, l'assistant personnel de l'utilisateur, installé sur son téléphone Android.
             Nous sommes le $now.
 
-            Tu réponds en français, de façon naturelle, précise et concise. Tes réponses peuvent être
-            lues à voix haute : pas de Markdown, pas de longues listes.
+            Tu réponds en français, de façon naturelle, précise et concise : une à trois phrases, sauf si
+            l'utilisateur demande des détails. Tes réponses sont souvent lues à voix haute : pas de Markdown,
+            pas de longues listes.
+
+            Rapidité :
+            - Quand tu lances une action avec un outil, écris dans le même message une très courte phrase
+              qui l'annonce (« J'ouvre YouTube. »).
+            - Si la demande contient plusieurs actions indépendantes, appelle tous les outils nécessaires
+              en même temps, pas l'un après l'autre.
+            - Après une action réussie, confirme en quelques mots seulement.
 
             Règles :
             - Ne prétends jamais avoir effectué une action si l'outil ne l'a pas réellement faite.
@@ -289,12 +489,55 @@ class Assistant(
         private const val MAX_ROUNDS = 8
 
         private const val GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+        private const val GROQ_URL = "https://api.groq.com/openai/v1/"
         private const val OPENAI_URL = "https://api.openai.com/v1/"
         private const val GEMINI_FALLBACK = "gemini-2.5-flash"
+        private const val GROQ_FALLBACK = "llama-3.3-70b-versatile"
 
         private val GEMINI_BACKUPS = listOf("gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash")
 
+        /** Modèles Groq, du préféré au moins bon : bons en français et avec les outils. */
+        private val GROQ_PREFERRED = listOf(
+            "openai/gpt-oss-120b",
+            "llama-3.3-70b-versatile",
+            "moonshotai/kimi-k2-instruct",
+            "meta-llama/llama-4-maverick",
+            "qwen/qwen3-32b",
+            "openai/gpt-oss-20b",
+            "meta-llama/llama-4-scout",
+        )
+
+        private val GROQ_EXCLUDED = listOf("guard", "whisper", "tts", "playai", "compound", "orpheus", "safeguard")
+
         private val RETRYABLE = setOf(429, 500, 502, 503, 504)
+
+        /** Au-delà, la connexion est rafraîchie pendant que l'utilisateur parle. */
+        private const val IDLE_MS = 45_000L
+
+        fun groqModels(names: List<String>): List<String> {
+            val usable = names.filter { name -> GROQ_EXCLUDED.none { it in name } }
+            val ranked = LinkedHashSet<String>()
+
+            for (prefix in GROQ_PREFERRED) {
+                usable.sortedDescending().filter { it.startsWith(prefix) }.forEach { ranked += it }
+            }
+
+            return ranked.toList()
+        }
+
+        /**
+         * Beaucoup de modèles « réfléchissent » en silence avant de répondre, ce qui
+         * ajoute plusieurs secondes : on réduit cette réflexion au minimum.
+         */
+        fun reasoningEffort(provider: String, model: String): String? = when (provider) {
+            JarvisSettings.PROVIDER_GEMINI -> if (model.startsWith("gemini-2")) "none" else "minimal"
+            JarvisSettings.PROVIDER_GROQ -> when {
+                "gpt-oss" in model -> "low"
+                "qwen3" in model -> "none"
+                else -> null
+            }
+            else -> null
+        }
 
         private val EXCLUDED = listOf(
             "lite", "image", "tts", "audio", "live", "thinking", "exp", "embedding", "vision", "8b",

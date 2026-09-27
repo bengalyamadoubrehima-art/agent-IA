@@ -130,6 +130,10 @@ class JarvisCore private constructor(private val context: Context) {
 
     private suspend fun converse(beep: Boolean) {
         voice.stopSpeaking()
+
+        // Pendant que l'utilisateur parle : modèle choisi et connexion prête.
+        scope.launch { assistant.warmUp() }
+
         if (beep) voice.beep()
 
         partial = ""
@@ -154,29 +158,75 @@ class JarvisCore private constructor(private val context: Context) {
         messages += ChatMessage(Role.USER, message)
         state = JarvisState.THINKING
 
+        // Sans écran, la réponse est toujours dite à voix haute.
+        val speaking = (settings.speakReplies || !uiVisible) && voice.canSpeak
+        val splitter = SentenceSplitter()
+        val streamed = StringBuilder()
+        var bubble: Long? = null
+
+        // Chaque morceau de réponse s'affiche tout de suite, et chaque phrase
+        // complète est dite sans attendre la fin.
+        fun show(text: String) {
+            val id = bubble
+            if (id == null) {
+                val created = ChatMessage(Role.JARVIS, text.trimStart())
+                bubble = created.id
+                messages += created
+            } else {
+                val index = messages.indexOfLast { it.id == id }
+                if (index >= 0) messages[index] = messages[index].copy(text = text)
+            }
+        }
+
+        fun onChunk(chunk: String) {
+            streamed.append(chunk)
+            show(streamed.toString().trimStart())
+
+            if (speaking) {
+                splitter.feed(chunk).forEach {
+                    state = JarvisState.SPEAKING
+                    voice.enqueue(it)
+                }
+            }
+        }
+
         var failed = false
 
         val answer = try {
-            assistant.respond(message)
+            assistant.respond(message) { chunk -> scope.launch { onChunk(chunk) } }
         } catch (e: Exception) {
             failed = true
+            val name = JarvisSettings.providerName(settings.provider)
             when (e) {
                 is java.net.UnknownHostException, is java.net.ConnectException ->
-                    "Pas d'accès à Internet : le téléphone n'arrive pas à joindre les serveurs de Google. " +
+                    "Pas d'accès à Internet : le téléphone n'arrive pas à joindre les serveurs de $name. " +
                         "Ce n'est pas la clé. Vérifie ta connexion (Wi-Fi ou données mobiles), " +
                         "le DNS privé, un VPN ou l'économiseur de données, puis réessaie."
                 is java.net.SocketTimeoutException ->
-                    "La connexion est trop lente : Google n'a pas répondu à temps. Réessaie."
+                    "La connexion est trop lente : $name n'a pas répondu à temps. Réessaie."
                 else -> "Erreur : ${e.message}"
             }
         }
 
-        messages += ChatMessage(Role.JARVIS, answer)
+        // Laisse passer les derniers morceaux envoyés au thread principal.
+        withContext(Dispatchers.Main) { }
 
-        // Sans écran, la réponse est toujours dite à voix haute.
-        if ((settings.speakReplies || !uiVisible) && voice.canSpeak) {
+        val already = streamed.toString().trim()
+
+        if (bubble == null) {
+            messages += ChatMessage(Role.JARVIS, answer)
+        } else if (answer != already) {
+            show(if (failed) "$already\n$answer".trim() else answer)
+        }
+
+        if (speaking) {
+            splitter.flush().takeIf { it.isNotEmpty() }?.let { voice.enqueue(it) }
+
+            // Réponse qui n'est pas arrivée au fil de l'eau (erreur, clé absente…).
+            if (answer.trim() != already) voice.enqueue(answer)
+
             state = JarvisState.SPEAKING
-            voice.speak(answer)
+            voice.awaitSpeech()
         }
 
         state = if (failed) JarvisState.ERROR else JarvisState.IDLE
@@ -263,6 +313,9 @@ class JarvisCore private constructor(private val context: Context) {
     // ========================================================
 
     fun refreshModules() {
+        // Choix du modèle dès l'ouverture : la première question va plus vite.
+        scope.launch { assistant.warmUp() }
+
         scope.launch {
             val pcReachable = withContext(Dispatchers.IO) { pc.reachable() }
 

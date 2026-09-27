@@ -159,6 +159,8 @@ class UiBridge(QObject):
         "tool.denied",
         "voice.transcribed",
         "voice.speaking_started",
+        "voice.reply_delta",
+        "voice.reply",
         "voice.error",
     ]
 
@@ -226,6 +228,7 @@ class ConfirmationDialog(QObject):
 class AIWorker(QThread):
     finished = Signal(str)
     failed = Signal(str)
+    delta = Signal(str)
 
     def __init__(self, orchestrator, message):
         super().__init__()
@@ -234,7 +237,10 @@ class AIWorker(QThread):
 
     def run(self):
         try:
-            response = self.orchestrator.handle(self.message)
+            response = self.orchestrator.handle(
+                self.message,
+                on_text=self.delta.emit,
+            )
             self.finished.emit(response)
         except Exception as error:
             self.failed.emit(str(error))
@@ -732,6 +738,7 @@ class JarvisWindow(QMainWindow):
 
         self.worker = None
         self.voice_worker = None
+        self.stream_label = None
         self.status_worker = None
 
         self.net_last = None
@@ -1123,8 +1130,11 @@ class JarvisWindow(QMainWindow):
         elif name == "voice.transcribed":
             self.add_message(data.get("text", ""), user=True)
 
-        elif name == "voice.speaking_started":
-            self.add_message(data.get("text", ""), user=False)
+        elif name == "voice.reply_delta":
+            self.stream_text(data.get("text", ""))
+
+        elif name == "voice.reply":
+            self.stream_end(data.get("text", ""))
 
         elif name == "voice.error":
             self.log(f"Erreur vocale : {data.get('error', '')}")
@@ -1161,12 +1171,37 @@ class JarvisWindow(QMainWindow):
 
         self.feed_layout.addWidget(block)
 
+        self.scroll_down()
+
+        return label
+
+    def scroll_down(self):
         QTimer.singleShot(
             50,
             lambda: self.feed_area.verticalScrollBar().setValue(
                 self.feed_area.verticalScrollBar().maximum()
             )
         )
+
+    # La réponse s'écrit au fur et à mesure qu'elle arrive.
+
+    def stream_text(self, text):
+        if not text:
+            return
+
+        if self.stream_label is None:
+            self.stream_label = self.add_message(text.lstrip(), user=False)
+        else:
+            self.stream_label.setText(self.stream_label.text() + text)
+            self.scroll_down()
+
+    def stream_end(self, text):
+        if self.stream_label is None:
+            self.add_message(text, user=False)
+        elif text:
+            self.stream_label.setText(text)
+
+        self.stream_label = None
 
     def busy(self):
         return (
@@ -1184,17 +1219,19 @@ class JarvisWindow(QMainWindow):
         self.add_message(message, user=True)
         self.input.setEnabled(False)
 
+        self.stream_label = None
         self.worker = AIWorker(self.orchestrator, message)
+        self.worker.delta.connect(self.stream_text)
         self.worker.finished.connect(self.on_ai_response)
         self.worker.failed.connect(self.on_ai_error)
         self.worker.start()
 
     def on_ai_response(self, response):
-        self.add_message(response, user=False)
+        self.stream_end(response)
         self.release_input()
 
     def on_ai_error(self, error):
-        self.add_message(f"Erreur : {error}", user=False)
+        self.stream_end(f"Erreur : {error}")
         self.log("Erreur du cerveau IA.")
         self.release_input()
 
@@ -1211,6 +1248,7 @@ class JarvisWindow(QMainWindow):
             return
 
         self.input.setEnabled(False)
+        self.stream_label = None
 
         self.voice_worker = VoiceWorker(self.voice)
         self.voice_worker.finished.connect(self.release_input)

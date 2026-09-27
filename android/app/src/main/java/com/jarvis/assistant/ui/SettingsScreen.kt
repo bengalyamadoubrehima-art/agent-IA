@@ -50,6 +50,7 @@ fun SettingsScreen(
 ) {
     var provider by remember { mutableStateOf(settings.provider) }
     var geminiKey by remember { mutableStateOf(settings.geminiKey) }
+    var groqKey by remember { mutableStateOf(settings.groqKey) }
     var openAiKey by remember { mutableStateOf(settings.openAiKey) }
     var model by remember { mutableStateOf(settings.model) }
     var gmailAddress by remember { mutableStateOf(settings.gmailAddress) }
@@ -63,6 +64,7 @@ fun SettingsScreen(
     fun save() {
         settings.provider = provider
         settings.geminiKey = geminiKey
+        settings.groqKey = groqKey
         settings.openAiKey = openAiKey
         settings.model = model
         settings.gmailAddress = gmailAddress
@@ -96,28 +98,32 @@ fun SettingsScreen(
 
         Section("CERVEAU")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            HudButton(
-                if (provider == JarvisSettings.PROVIDER_GEMINI) "● GEMINI (gratuit)" else "GEMINI (gratuit)",
-                Modifier.weight(1f),
-                primary = provider == JarvisSettings.PROVIDER_GEMINI,
-            ) { provider = JarvisSettings.PROVIDER_GEMINI }
-            HudButton(
-                if (provider == JarvisSettings.PROVIDER_OPENAI) "● OPENAI" else "OPENAI",
-                Modifier.weight(1f),
-                primary = provider == JarvisSettings.PROVIDER_OPENAI,
-            ) { provider = JarvisSettings.PROVIDER_OPENAI }
+            for ((id, label) in listOf(
+                JarvisSettings.PROVIDER_GEMINI to "GEMINI",
+                JarvisSettings.PROVIDER_GROQ to "GROQ",
+                JarvisSettings.PROVIDER_OPENAI to "OPENAI",
+            )) {
+                HudButton(
+                    if (provider == id) "● $label" else label,
+                    Modifier.weight(1f),
+                    primary = provider == id,
+                ) { provider = id }
+            }
         }
 
-        if (provider == JarvisSettings.PROVIDER_GEMINI) {
-            Text(
-                "Clé gratuite, sans carte bancaire : aistudio.google.com → « Get API key ».",
-                color = Muted,
-                fontSize = 11.sp,
-                lineHeight = 16.sp,
-            )
-            HudField("Clé API Gemini", geminiKey, { geminiKey = it }, secret = true)
-        } else {
-            HudField("Clé API OpenAI", openAiKey, { openAiKey = it }, secret = true)
+        when (provider) {
+            JarvisSettings.PROVIDER_GEMINI -> {
+                Hint("Gratuit, sans carte bancaire : aistudio.google.com → « Get API key ».")
+                HudField("Clé API Gemini", geminiKey, { geminiKey = it }, secret = true)
+            }
+            JarvisSettings.PROVIDER_GROQ -> {
+                Hint("Gratuit, sans carte bancaire et très rapide : console.groq.com → « API Keys ».")
+                HudField("Clé API Groq (gsk_…)", groqKey, { groqKey = it }, secret = true)
+            }
+            else -> {
+                Hint("Payant.")
+                HudField("Clé API OpenAI", openAiKey, { openAiKey = it }, secret = true)
+            }
         }
 
         HudField("Modèle (laisser vide = automatique)", model, { model = it })
@@ -181,6 +187,11 @@ fun SettingsScreen(
         HudButton("Enregistrer", Modifier.fillMaxWidth(), primary = true) { save() }
         HudButton("Annuler", Modifier.fillMaxWidth()) { onClose() }
     }
+}
+
+@Composable
+private fun Hint(text: String) {
+    Text(text, color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
 }
 
 @Composable

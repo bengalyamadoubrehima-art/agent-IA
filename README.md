@@ -55,7 +55,7 @@ cherche dans le menu Démarrer (y compris les applications du Microsoft Store)
 sous Windows, dans les fichiers `.desktop` sous Linux, et dans `/Applications`
 sous macOS.
 
-### Le cerveau : Gemini (gratuit) ou OpenAI
+### Le cerveau : Gemini ou Groq (gratuits), ou OpenAI
 
 JARVIS a besoin d'une IA pour comprendre tes phrases. Par défaut, il utilise
 **Google Gemini**, gratuit et **sans carte bancaire** :
@@ -73,8 +73,23 @@ améliorer ses modèles.
 Avec Gemini, la voix du PC est gratuite aussi : reconnaissance vocale de Google
 et voix naturelle de Microsoft Edge (`JARVIS_VOICE`).
 
+**Groq**, gratuit, sans carte bancaire et **très rapide** (réponses souvent en
+moins d'une seconde) :
+
+1. Va sur **console.groq.com**, connecte-toi avec ton compte Google.
+2. **API Keys** → **Create API Key** : la clé commence par `gsk_`.
+3. Dans `.env` : `AI_PROVIDER=groq` et `GROQ_API_KEY=ta_clé`.
+
+Groq fait tourner des IA publiques (Llama, GPT-OSS…) sur des puces spéciales :
+le modèle est choisi automatiquement. Garde les deux clés : si l'un est saturé,
+change `AI_PROVIDER` pour passer à l'autre.
+
 Pour utiliser OpenAI (payant) à la place : `AI_PROVIDER=openai` et
 `OPENAI_API_KEY=…`.
+
+JARVIS répond au fil de l'eau : la réponse s'affiche pendant qu'elle s'écrit, et
+il commence à parler dès la première phrase. Au micro, l'enregistrement
+s'arrête tout seul dès que tu as fini de parler.
 
 ## 2. Connecter le téléphone Android
 
@@ -169,7 +184,7 @@ conservés.
 
 Touche l'icône ⚙ en haut à droite :
 
-- **Cerveau** : **Gemini (gratuit)** et ta **clé API Gemini** (la même que sur
+- **Cerveau** : **Gemini** ou **Groq** (gratuits) et ta clé (la même que sur
   le PC). Laisse **Modèle** vide : il est choisi automatiquement.
 - **Gmail** : ton adresse et ton mot de passe d'application.
 - **Indicatif pays** : `223` pour le Mali.
@@ -246,7 +261,7 @@ directement le micro. Tu peux aussi le glisser sur ton écran d'accueil.
 
 ```
 main.py                   assemble tous les modules et lance l'interface
-core/                     cerveau IA (Gemini ou OpenAI, avec outils), mémoire, permissions, confirmation
+core/                     cerveau IA (Gemini, Groq ou OpenAI, avec outils), mémoire, permissions, confirmation
 interfaces/desktop.py     interface HUD PySide6 (conversation, voix, confirmations, diagnostics)
 interfaces/assets/fonts/  polices Orbitron et Space Mono (licence SIL OFL)
 interfaces/voice.py       enregistrement, transcription et synthèse vocale

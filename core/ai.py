@@ -32,7 +32,16 @@ Règles :
 - Ne contourne jamais le système de permissions.
 - Pour une action nécessitant une confirmation,
   laisse le système de confirmation gérer la demande.
-- Sois naturel, précis et concis.
+- Sois naturel, précis et concis : une à trois phrases, sauf si
+  l'utilisateur demande des détails. Tes réponses sont souvent lues
+  à voix haute : pas de Markdown, pas de longues listes.
+
+Rapidité :
+- Quand tu lances une action avec un outil, écris dans le même
+  message une très courte phrase qui l'annonce (« J'ouvre YouTube. »).
+- Si la demande contient plusieurs actions indépendantes, appelle
+  tous les outils nécessaires en même temps, pas l'un après l'autre.
+- Après une action réussie, confirme en quelques mots seulement.
 
 Appareils :
 - Sans précision, « ouvre X » concerne le PC. Si l'utilisateur
@@ -103,7 +112,11 @@ Appareils :
             for definition in self.tools.api_definitions
         ]
 
-    def respond(self, message):
+    def respond(self, message, on_text=None):
+        """
+        Répond à un message. on_text(morceau) reçoit le texte au fil de
+        l'eau, pour l'afficher et le dire sans attendre la fin.
+        """
 
         if self.brain.client is None:
             return (
@@ -119,50 +132,63 @@ Appareils :
             message
         )
 
+        parts = []
+
+        def emit(text):
+            # Espace entre le texte de deux tours (annonce puis confirmation).
+            if emit.new_round and parts:
+                text = " " + text.lstrip()
+            emit.new_round = False
+
+            parts.append(text)
+
+            if on_text:
+                on_text(text)
+
+        emit.new_round = False
+
         try:
 
-            answer = None
+            finished = False
 
             for _ in range(8):
 
-                reply = self.brain.chat(
+                emit.new_round = True
+
+                reply = self.brain.stream(
                     messages,
-                    tools
+                    tools,
+                    on_text=emit
                 )
 
-                calls = reply.tool_calls or []
+                calls = reply.get("tool_calls") or []
 
                 if not calls:
-                    answer = reply.content or ""
+                    finished = True
                     break
 
                 # L'appel d'outil est renvoyé tel quel avec son résultat,
                 # y compris la « thought_signature » exigée par Gemini
                 # (champ extra_content).
-                messages.append({
-                    "role": "assistant",
-                    "content": reply.content,
-                    "tool_calls": [
-                        call.model_dump(exclude_none=True)
-                        for call in calls
-                    ],
-                })
+                messages.append(reply)
 
                 for call in calls:
 
+                    function = call["function"]
+
                     try:
                         arguments = json.loads(
-                            call.function.arguments or "{}"
+                            function.get("arguments") or "{}"
                         )
                     except json.JSONDecodeError:
                         arguments = {}
 
                     print(
-                        f"\n🔧 Jarvis → {call.function.name}"
+                        f"\n🔧 Jarvis → {function['name']}"
                     )
 
                     result = self.tools.execute(
-                        call.function.name,
+                        function["name"],
                         arguments,
                         confirmation_handler=(
                             self.confirmation_handler
@@ -175,14 +201,18 @@ Appareils :
 
                     messages.append({
                         "role": "tool",
-                        "tool_call_id": call.id,
+                        "tool_call_id": call["id"],
                         "content": str(result),
                     })
 
-            if answer is None:
-                answer = "Je n'ai pas pu terminer cette demande."
+            answer = "".join(parts).strip()
 
-            answer = answer.strip() or "Je n'ai pas de réponse."
+            if not answer:
+                answer = (
+                    "Je n'ai pas de réponse."
+                    if finished
+                    else "Je n'ai pas pu terminer cette demande."
+                )
 
             self.memory.add_message(
                 "assistant",

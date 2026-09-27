@@ -9,7 +9,7 @@ class JarvisSettings(context: Context) {
 
     private val prefs = context.getSharedPreferences("jarvis", Context.MODE_PRIVATE)
 
-    /** Cerveau utilisé : [PROVIDER_GEMINI] (gratuit, par défaut) ou [PROVIDER_OPENAI]. */
+    /** Cerveau utilisé : [PROVIDER_GEMINI] (gratuit, par défaut), [PROVIDER_GROQ] (gratuit, très rapide) ou [PROVIDER_OPENAI]. */
     var provider: String
         get() = text("provider", PROVIDER_GEMINI)
         set(value) = save("provider", value)
@@ -18,13 +18,21 @@ class JarvisSettings(context: Context) {
         get() = text("gemini_key")
         set(value) = save("gemini_key", value)
 
+    var groqKey: String
+        get() = text("groq_key")
+        set(value) = save("groq_key", value)
+
     var openAiKey: String
         get() = text("openai_key")
         set(value) = save("openai_key", value)
 
     /** Clé du cerveau choisi. */
     val apiKey: String
-        get() = if (provider == PROVIDER_OPENAI) openAiKey else geminiKey
+        get() = when (provider) {
+            PROVIDER_OPENAI -> openAiKey
+            PROVIDER_GROQ -> groqKey
+            else -> geminiKey
+        }
 
     /** Modèle imposé ; vide = choisi automatiquement. */
     var model: String
@@ -73,7 +81,14 @@ class JarvisSettings(context: Context) {
 
     companion object {
         const val PROVIDER_GEMINI = "gemini"
+        const val PROVIDER_GROQ = "groq"
         const val PROVIDER_OPENAI = "openai"
+
+        fun providerName(provider: String): String = when (provider) {
+            PROVIDER_OPENAI -> "OpenAI"
+            PROVIDER_GROQ -> "Groq"
+            else -> "Gemini"
+        }
 
         // Modèle OpenAI par défaut (le même que sur le PC).
         const val DEFAULT_OPENAI_MODEL = "gpt-5.6-luna"
